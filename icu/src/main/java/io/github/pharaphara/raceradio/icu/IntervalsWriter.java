@@ -95,6 +95,23 @@ public final class IntervalsWriter {
         return Optional.of(reread);
     }
 
+    /**
+     * Publishes a workout from text that the calendar already understood once, such as an original
+     * restored after an adjustment is undone. Kept only if the calendar understands it again.
+     */
+    public Optional<CalendarEvent> publishText(LocalDate day, String sport, String name, String description) {
+        Optional<CalendarEvent> created = postEvent(event(day, "WORKOUT", sport, name, description));
+        if (created.isEmpty()) {
+            return created;
+        }
+        CalendarEvent reread = client.get(client.athletePath("events/" + created.get().id()), new TypeReference<CalendarEvent>() { });
+        if (!reread.wasUnderstoodAsAWorkout()) {
+            deleteOwnEvent(reread.id());
+            throw new WorkoutNotUnderstood(List.of("the calendar did not understand the restored workout"));
+        }
+        return Optional.of(reread);
+    }
+
     /** A note on the calendar, such as the morning verdict and its reasons. */
     public Optional<CalendarEvent> publishNote(LocalDate day, String title, String text) {
         return postEvent(event(day, "NOTE", null, title, text));

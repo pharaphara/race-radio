@@ -65,13 +65,16 @@ public final class CommandRouter {
     private final io.github.pharaphara.raceradio.bot.store.Conversations memory;
     private final io.github.pharaphara.raceradio.bot.strength.BoardReader boards;
     private final io.github.pharaphara.raceradio.bot.plan.PlanCommands planCommands;
+    private final io.github.pharaphara.raceradio.bot.plan.Adapter adapter;
 
     public CommandRouter(TelegramClient telegram, long chatId, MorningCheck morning, FeelStore feels, DecisionLog decisions,
                          Ledger ledger, Journal journal, CoachModel model, Clock clock, ZoneId zone, boolean dryRun,
                          io.github.pharaphara.raceradio.bot.chat.Conversation conversation,
                          io.github.pharaphara.raceradio.bot.store.Conversations memory,
                          io.github.pharaphara.raceradio.bot.strength.BoardReader boards,
-                         io.github.pharaphara.raceradio.bot.plan.PlanCommands planCommands) {
+                         io.github.pharaphara.raceradio.bot.plan.PlanCommands planCommands,
+                         io.github.pharaphara.raceradio.bot.plan.Adapter adapter) {
+        this.adapter = adapter;
         this.boards = boards;
         this.planCommands = planCommands;
         this.conversation = conversation;
@@ -91,7 +94,19 @@ public final class CommandRouter {
 
     public void handle(TelegramClient.Update u) {
         if (u.isCallback()) {
-            telegram.acknowledge(u.callbackId(), "Reçu");
+            String data = u.callbackData() == null ? "" : u.callbackData();
+            if (data.startsWith("undo:")) {
+                String answer;
+                try {
+                    answer = adapter.undo(Long.parseLong(data.substring(5)));
+                } catch (RuntimeException e) {
+                    answer = "Je n'ai pas pu annuler : " + e.getMessage();
+                }
+                telegram.acknowledge(u.callbackId(), "Annulation");
+                telegram.send(chatId, answer);
+            } else {
+                telegram.acknowledge(u.callbackId(), "Reçu");
+            }
             return;
         }
         if (u.hasPhoto()) {

@@ -135,9 +135,10 @@ public class BotConfiguration {
                                 io.github.pharaphara.raceradio.bot.chat.Conversation conversation,
                                 io.github.pharaphara.raceradio.bot.store.Conversations memory,
                                 io.github.pharaphara.raceradio.bot.strength.BoardReader boards,
-                                io.github.pharaphara.raceradio.bot.plan.PlanCommands planCommands) {
+                                io.github.pharaphara.raceradio.bot.plan.PlanCommands planCommands,
+                                io.github.pharaphara.raceradio.bot.plan.Adapter adapter) {
         return new CommandRouter(telegram, props.telegram().allowedChatId(), morning, feels, decisions, ledger, journal,
-                model, clock, props.zone(), props.dryRun(), conversation, memory, boards, planCommands);
+                model, clock, props.zone(), props.dryRun(), conversation, memory, boards, planCommands, adapter);
     }
 
     @Bean
@@ -146,6 +147,14 @@ public class BotConfiguration {
         return new io.github.pharaphara.raceradio.bot.plan.Planner(intervals, writer, plans,
                 props.athlete() == null ? null : props.athlete().swimCssSeconds(),
                 props.athlete() == null ? 5 : props.athlete().rampPerWeek(), clock);
+    }
+
+    @Bean
+    io.github.pharaphara.raceradio.bot.plan.Adapter adapter(IntervalsClient intervals, IntervalsWriter writer,
+                                                          io.github.pharaphara.raceradio.bot.store.Plans plans,
+                                                          io.github.pharaphara.raceradio.bot.plan.Planner planner,
+                                                          org.springframework.jdbc.core.JdbcTemplate jdbc, Clock clock) {
+        return new io.github.pharaphara.raceradio.bot.plan.Adapter(intervals, writer, plans, planner, jdbc, clock);
     }
 
     @Bean

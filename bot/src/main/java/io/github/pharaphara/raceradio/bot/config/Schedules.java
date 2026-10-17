@@ -28,12 +28,15 @@ public class Schedules implements SchedulingConfigurer {
     private final ActivityWatcher watcher;
     private final io.github.pharaphara.raceradio.bot.plan.Planner planner;
     private final io.github.pharaphara.raceradio.bot.store.Plans plans;
+    private final io.github.pharaphara.raceradio.bot.plan.Adapter adapter;
 
     private final String once;
 
     public Schedules(RaceRadioProperties props, MorningCheck morning, TelegramClient telegram, Journal journal, ActivityWatcher watcher,
                      @org.springframework.beans.factory.annotation.Value("${race-radio.once:}") String once,
-                     io.github.pharaphara.raceradio.bot.plan.Planner planner, io.github.pharaphara.raceradio.bot.store.Plans plans) {
+                     io.github.pharaphara.raceradio.bot.plan.Planner planner, io.github.pharaphara.raceradio.bot.store.Plans plans,
+                     io.github.pharaphara.raceradio.bot.plan.Adapter adapter) {
+        this.adapter = adapter;
         this.planner = planner;
         this.plans = plans;
         this.once = once;
@@ -60,8 +63,19 @@ public class Schedules implements SchedulingConfigurer {
     void morningCall() {
         try {
             MorningCheck.Outcome o = morning.run(true);
+            java.util.Optional<io.github.pharaphara.raceradio.bot.plan.Adapter.Result> adjusted = java.util.Optional.empty();
+            try {
+                adjusted = adapter.adapt(o.readiness().verdict());
+            } catch (RuntimeException e) {
+                LOG.warn("adjusting the day failed: {}", e.getMessage());
+            }
             if (props.telegram().allowedChatId() != 0) {
-                telegram.send(props.telegram().allowedChatId(), o.message());
+                if (adjusted.isPresent()) {
+                    telegram.sendWithButtons(props.telegram().allowedChatId(), o.message() + "\n\n" + adjusted.get().summary(),
+                            java.util.Map.of("Annuler l'ajustement", "undo:" + adjusted.get().batch()));
+                } else {
+                    telegram.send(props.telegram().allowedChatId(), o.message());
+                }
             }
         } catch (RuntimeException e) {
             LOG.error("morning call failed: {}", e.getMessage());

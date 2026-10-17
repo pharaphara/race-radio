@@ -83,3 +83,13 @@ CREATE TABLE IF NOT EXISTS setting (
     key    TEXT PRIMARY KEY,
     value  TEXT NOT NULL
 );
+
+-- Workouts the coach lightened on a yellow or red morning, kept so the change can be undone.
+CREATE TABLE IF NOT EXISTS adaptation (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    at               TEXT NOT NULL,
+    day              TEXT NOT NULL,
+    original_json    TEXT NOT NULL,
+    replacement_id   INTEGER,
+    undone           INTEGER NOT NULL DEFAULT 0
+);
