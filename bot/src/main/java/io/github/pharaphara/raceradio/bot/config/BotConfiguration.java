@@ -134,9 +134,24 @@ public class BotConfiguration {
                                 Ledger ledger, Journal journal, CoachModel model, Clock clock,
                                 io.github.pharaphara.raceradio.bot.chat.Conversation conversation,
                                 io.github.pharaphara.raceradio.bot.store.Conversations memory,
-                                io.github.pharaphara.raceradio.bot.strength.BoardReader boards) {
+                                io.github.pharaphara.raceradio.bot.strength.BoardReader boards,
+                                io.github.pharaphara.raceradio.bot.plan.PlanCommands planCommands) {
         return new CommandRouter(telegram, props.telegram().allowedChatId(), morning, feels, decisions, ledger, journal,
-                model, clock, props.zone(), props.dryRun(), conversation, memory, boards);
+                model, clock, props.zone(), props.dryRun(), conversation, memory, boards, planCommands);
+    }
+
+    @Bean
+    io.github.pharaphara.raceradio.bot.plan.Planner planner(IntervalsClient intervals, IntervalsWriter writer,
+                                                          io.github.pharaphara.raceradio.bot.store.Plans plans, Clock clock) {
+        return new io.github.pharaphara.raceradio.bot.plan.Planner(intervals, writer, plans,
+                props.athlete() == null ? null : props.athlete().swimCssSeconds(),
+                props.athlete() == null ? 5 : props.athlete().rampPerWeek(), clock);
+    }
+
+    @Bean
+    io.github.pharaphara.raceradio.bot.plan.PlanCommands planCommands(io.github.pharaphara.raceradio.bot.store.Plans plans,
+                                                                    io.github.pharaphara.raceradio.bot.plan.Planner planner, Clock clock) {
+        return new io.github.pharaphara.raceradio.bot.plan.PlanCommands(plans, planner, clock);
     }
 
     @Bean

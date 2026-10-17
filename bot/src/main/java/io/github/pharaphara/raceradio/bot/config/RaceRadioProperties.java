@@ -22,7 +22,18 @@ public record RaceRadioProperties(
         Telegram telegram,
         Intervals intervals,
         Model model,
-        Schedule schedule) {
+        Schedule schedule,
+        Athlete athlete) {
+
+    /**
+     * Settings about the athlete that the calendar does not hold, or holds wrong.
+     *
+     * @param swimCssSeconds  critical swim speed in seconds per 100 m from a 400/200 test; overrides
+     *                        the profile's swim threshold, which is often a guess. Null to use it.
+     * @param rampPerWeek     how much fitness may rise per week; 5 to 7 suits an intermediate athlete
+     */
+    public record Athlete(Integer swimCssSeconds, double rampPerWeek) {
+    }
 
     public record Telegram(String token, long allowedChatId) {
     }

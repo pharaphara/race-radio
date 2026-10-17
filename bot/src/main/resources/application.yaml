@@ -50,6 +50,10 @@ race-radio:
     prices:
       claude-sonnet-5-5: { input: 2.00, output: 10.00, cache-write: 4.00, cache-read: 0.20 }
       claude-opus-5-5: { input: 4.00, output: 20.00, cache-write: 8.00, cache-read: 0.20 }
+  athlete:
+    # Seconds per 100 m from a 400 m / 200 m test; empty to use the Intervals.icu profile.
+    swim-css-seconds: ${RACE_RADIO_SWIM_CSS:}
+    ramp-per-week: 5
   schedule:
     morning-at: "07:00"
     watch-from: "06:00"

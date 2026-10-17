@@ -65,3 +65,21 @@ CREATE TABLE IF NOT EXISTS note (
     text    TEXT NOT NULL,
     active  INTEGER NOT NULL DEFAULT 1
 );
+
+-- What the training is for.
+CREATE TABLE IF NOT EXISTS objective (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind      TEXT NOT NULL,
+    sport     TEXT NOT NULL,
+    day       TEXT,
+    priority  TEXT NOT NULL,
+    target    TEXT NOT NULL,
+    active    INTEGER NOT NULL DEFAULT 1,
+    at        TEXT NOT NULL
+);
+
+-- Small settings the athlete changes from Telegram: planning mode, sports in season, availability.
+CREATE TABLE IF NOT EXISTS setting (
+    key    TEXT PRIMARY KEY,
+    value  TEXT NOT NULL
+);

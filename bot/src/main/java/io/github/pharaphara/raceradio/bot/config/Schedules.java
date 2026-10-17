@@ -26,11 +26,16 @@ public class Schedules implements SchedulingConfigurer {
     private final TelegramClient telegram;
     private final Journal journal;
     private final ActivityWatcher watcher;
+    private final io.github.pharaphara.raceradio.bot.plan.Planner planner;
+    private final io.github.pharaphara.raceradio.bot.store.Plans plans;
 
     private final String once;
 
     public Schedules(RaceRadioProperties props, MorningCheck morning, TelegramClient telegram, Journal journal, ActivityWatcher watcher,
-                     @org.springframework.beans.factory.annotation.Value("${race-radio.once:}") String once) {
+                     @org.springframework.beans.factory.annotation.Value("${race-radio.once:}") String once,
+                     io.github.pharaphara.raceradio.bot.plan.Planner planner, io.github.pharaphara.raceradio.bot.store.Plans plans) {
+        this.planner = planner;
+        this.plans = plans;
         this.once = once;
         this.props = props;
         this.morning = morning;
@@ -47,6 +52,7 @@ public class Schedules implements SchedulingConfigurer {
         }
         registrar.addCronTask(new CronTask(this::morningCall, daily(props.schedule().morningAt())));
         registrar.addCronTask(new CronTask(this::purgeJournal, daily(LocalTime.of(3, 30))));
+        registrar.addCronTask(new CronTask(this::sundayEvening, new CronTrigger("0 0 19 * * SUN", props.zone())));
         // The watcher checks its own daytime window; outside it a poll costs nothing.
         registrar.addFixedDelayTask(this::watch, java.time.Duration.ofMinutes(props.schedule().watchEveryMinutes()));
     }
@@ -74,6 +80,27 @@ public class Schedules implements SchedulingConfigurer {
             }
         } catch (RuntimeException e) {
             LOG.warn("looking for new activities failed: {}", e.getMessage());
+        }
+    }
+
+    /** The week's recap and, in planning mode, next week published. */
+    void sundayEvening() {
+        try {
+            StringBuilder b = new StringBuilder(planner.recap());
+            var next = planner.nextWeek();
+            b.append("\n\n").append(planner.describe(next));
+            if (plans.mode() == io.github.pharaphara.raceradio.bot.store.Plans.Mode.PLAN && !next.sessions().isEmpty()) {
+                var problems = planner.publish(next);
+                b.append(problems.isEmpty()
+                        ? (props.dryRun() ? "\n\nMode sec : rien n'a été publié." : "\n\nPubliée dans Intervals.icu, elle arrive sur ta montre.")
+                        : "\n\nNon publié : " + String.join(" ; ", problems));
+            }
+            planner.feasibility().ifPresent(f -> b.append("\n\n").append(planner.describe(f)));
+            if (props.telegram().allowedChatId() != 0) {
+                telegram.send(props.telegram().allowedChatId(), b.toString());
+            }
+        } catch (RuntimeException e) {
+            LOG.warn("Sunday recap failed: {}", e.getMessage());
         }
     }
 

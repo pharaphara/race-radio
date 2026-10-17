@@ -34,6 +34,11 @@ public final class CommandRouter {
             /aujourdhui · le message du matin, rédigé
             /pourquoi · le détail de la dernière décision
             /ressenti 4 3 4 4 5 · sommeil, énergie, courbatures, humeur, appétit, de 1 (mauvais) à 5 (bon)
+            /objectif · tes objectifs (course datée, volume ou forme)
+            /dispo lun 1h, mer 45min, sam 2h · tes créneaux
+            /sports natation off · les sports de la saison
+            /mode planifier · ajuster · analyser
+            /plan · la semaine prochaine et la faisabilité
             /note j'ai mal au mollet gauche · un fait que le coach doit garder en tête
             /notes · les faits gardés · /oubli 3 · en retirer un
             /cout · les appels au modèle ce mois-ci
@@ -59,13 +64,16 @@ public final class CommandRouter {
     private final io.github.pharaphara.raceradio.bot.chat.Conversation conversation;
     private final io.github.pharaphara.raceradio.bot.store.Conversations memory;
     private final io.github.pharaphara.raceradio.bot.strength.BoardReader boards;
+    private final io.github.pharaphara.raceradio.bot.plan.PlanCommands planCommands;
 
     public CommandRouter(TelegramClient telegram, long chatId, MorningCheck morning, FeelStore feels, DecisionLog decisions,
                          Ledger ledger, Journal journal, CoachModel model, Clock clock, ZoneId zone, boolean dryRun,
                          io.github.pharaphara.raceradio.bot.chat.Conversation conversation,
                          io.github.pharaphara.raceradio.bot.store.Conversations memory,
-                         io.github.pharaphara.raceradio.bot.strength.BoardReader boards) {
+                         io.github.pharaphara.raceradio.bot.strength.BoardReader boards,
+                         io.github.pharaphara.raceradio.bot.plan.PlanCommands planCommands) {
         this.boards = boards;
+        this.planCommands = planCommands;
         this.conversation = conversation;
         this.memory = memory;
         this.telegram = telegram;
@@ -112,6 +120,11 @@ public final class CommandRouter {
             case "/ressenti" -> feel(text);
             case "/cout" -> cost();
             case "/dernierenvoi" -> lastSent();
+            case "/objectif" -> planCommands.objective(text);
+            case "/dispo" -> planCommands.availability(text);
+            case "/sports" -> planCommands.sports(text);
+            case "/mode" -> planCommands.mode(text);
+            case "/plan" -> planCommands.plan();
             case "/note" -> note(text);
             case "/notes" -> notes();
             case "/oubli" -> forget(text);
