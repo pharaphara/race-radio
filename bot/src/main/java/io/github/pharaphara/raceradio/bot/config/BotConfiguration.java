@@ -175,14 +175,22 @@ public class BotConfiguration {
         return new io.github.pharaphara.raceradio.bot.strength.BoardReader(model, intervals, writer, props.dataDir().resolve("photos"), clock);
     }
 
-    /** Starts listening to Telegram on its own thread, only when a token and a chat are configured. */
+    /**
+     * Starts listening to Telegram on its own thread, only when a token and a chat are configured,
+     * and never in a one-off run: Telegram serves a bot to one listener at a time, so a check run
+     * beside the service would take its messages away.
+     */
     @Bean
-    SmartLifecycle telegramListener(TelegramClient telegram, CommandRouter router) {
+    SmartLifecycle telegramListener(TelegramClient telegram, CommandRouter router,
+                                    @org.springframework.beans.factory.annotation.Value("${race-radio.once:}") String once) {
         return new SmartLifecycle() {
             private TelegramPoller poller;
 
             @Override
             public void start() {
+                if (!once.isBlank()) {
+                    return;
+                }
                 if (props.telegram().token() == null || props.telegram().token().isBlank() || props.telegram().allowedChatId() == 0) {
                     LOG.warn("Telegram is not configured: TELEGRAM_TOKEN and TELEGRAM_ALLOWED_CHAT_ID are needed to talk");
                     return;

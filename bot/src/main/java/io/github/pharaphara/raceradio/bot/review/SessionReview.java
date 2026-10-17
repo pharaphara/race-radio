@@ -147,7 +147,7 @@ public final class SessionReview {
                     : WPrimeBalance.compute(s.values(), ftp, settings.get().wPrime());
             power = new SessionFacts.PowerFacts(Math.round(p.weightedAveragePower()), Math.round(p.averagePower()),
                     round2(p.intensity()), Math.round(p.load()), round2(p.variability()),
-                    w == null ? null : WPrimeBalance.MODEL, w == null ? 0 : (int) Math.round(100 * w.deepestDepletion()),
+                    w == null ? null : WPrimeBalance.MODEL, w == null ? 0 : (int) Math.round(100 * (1 - w.deepestDepletion())),
                     w != null && w.exceededDeclaredCapacity());
             ZoneSet zs = ZoneSet.cyclingPower(ftp);
             zoneModel = zs.model();

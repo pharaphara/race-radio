@@ -51,7 +51,7 @@ public final class SessionCharts {
                 }
             }
             panels.add(Charts.Panel.of("Fréquence cardiaque (bpm)", List.of(new Charts.Series("FC", hr, HEART)),
-                    y -> String.valueOf(Math.round(y))).forSession());
+                    y -> String.valueOf(Math.round(y))).forSession().fullRange());
         }
         List<Charts.Band> bands = f.work().stream()
                 .map(b -> new Charts.Band(b.startSecond(), b.startSecond() + b.seconds())).toList();
@@ -92,9 +92,17 @@ public final class SessionCharts {
                 y -> (int) y / 60 + ":" + String.format("%02d", Math.round(y) % 60)).inverted(swim ? 10 : 30).forSession();
     }
 
+    private static final int MAX_TITLE_GROUPS = 3;
+
     private static String title(SessionFacts f) {
         String sport = EffortSignal.BIKE.contains(f.sport()) ? "Vélo" : EffortSignal.RUN.contains(f.sport()) ? "Course"
                 : EffortSignal.SWIM.contains(f.sport()) ? "Natation" : f.sport();
-        return f.repetitions().isEmpty() ? sport : sport + " · " + String.join(", ", f.repetitions());
+        if (f.repetitions().isEmpty()) {
+            return sport;
+        }
+        // The title is one line on a phone: past a few groups it names the count, and the chart shows the rest.
+        List<String> groups = f.repetitions().stream().map(r -> r.startsWith("1 × ") ? r.substring(4) : r).toList();
+        return groups.size() <= MAX_TITLE_GROUPS ? sport + " · " + String.join(", ", groups)
+                : sport + " · " + f.work().size() + " blocs de travail";
     }
 }
