@@ -19,6 +19,7 @@ import java.time.LocalDate;
  * <ul>
  *   <li>{@code --race-radio.once=morning}: the morning call.</li>
  *   <li>{@code --race-radio.once=review:<activity id>}: the review of one activity of the last year.</li>
+ *   <li>{@code --race-radio.once=session:<request>}: the draft of one workout, shown, never published.</li>
  * </ul>
  */
 @Component
@@ -31,10 +32,13 @@ public class RunOnce implements ApplicationRunner {
     private final ConfigurableApplicationContext context;
     private final java.nio.file.Path charts;
     private final io.github.pharaphara.raceradio.bot.strength.BoardReader boards;
+    private final io.github.pharaphara.raceradio.bot.plan.SessionCreator sessions;
 
     public RunOnce(@Value("${race-radio.once:}") String once, MorningCheck morning, SessionReview review,
                    IntervalsClient intervals, ConfigurableApplicationContext context, RaceRadioProperties props,
-                   io.github.pharaphara.raceradio.bot.strength.BoardReader boards) {
+                   io.github.pharaphara.raceradio.bot.strength.BoardReader boards,
+                   io.github.pharaphara.raceradio.bot.plan.SessionCreator sessions) {
+        this.sessions = sessions;
         this.boards = boards;
         this.charts = props.dataDir().resolve("charts");
         this.once = once;
@@ -67,11 +71,13 @@ public class RunOnce implements ApplicationRunner {
             } catch (java.io.IOException e) {
                 throw new java.io.UncheckedIOException(e);
             }
+        } else if (once.startsWith("session:")) {
+            System.out.println("\n" + sessions.prepare("/seance " + once.substring("session:".length())).message());
         } else if (once.equals("fitness")) {
             byte[] chart = morning.fitnessChart();
             save("fitness", chart == null ? java.util.List.of() : java.util.List.of(chart));
         } else {
-            throw new IllegalArgumentException("race-radio.once must be morning, fitness, review:<activity id> or photo:<file>");
+            throw new IllegalArgumentException("race-radio.once must be morning, fitness, review:<activity id>, photo:<file> or session:<request>");
         }
         System.exit(SpringApplication.exit(context, () -> 0));
     }

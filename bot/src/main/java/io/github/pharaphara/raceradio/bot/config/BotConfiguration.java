@@ -137,9 +137,19 @@ public class BotConfiguration {
                                 io.github.pharaphara.raceradio.bot.strength.BoardReader boards,
                                 io.github.pharaphara.raceradio.bot.plan.PlanCommands planCommands,
                                 io.github.pharaphara.raceradio.bot.plan.Adapter adapter,
-                                io.github.pharaphara.raceradio.bot.merge.Merger merger) {
+                                io.github.pharaphara.raceradio.bot.merge.Merger merger,
+                                io.github.pharaphara.raceradio.bot.plan.SessionCreator sessions) {
         return new CommandRouter(telegram, props.telegram().allowedChatId(), morning, feels, decisions, ledger, journal,
-                model, clock, props.zone(), props.dryRun(), conversation, memory, boards, planCommands, adapter, merger);
+                model, clock, props.zone(), props.dryRun(), conversation, memory, boards, planCommands, adapter, merger, sessions);
+    }
+
+    @Bean
+    io.github.pharaphara.raceradio.bot.plan.SessionCreator sessionCreator(CoachModel model,
+                                                                        io.github.pharaphara.raceradio.bot.plan.Planner planner,
+                                                                        IntervalsClient intervals, IntervalsWriter writer,
+                                                                        TelegramClient telegram, Clock clock) {
+        return new io.github.pharaphara.raceradio.bot.plan.SessionCreator(model, planner, intervals, writer, telegram,
+                props.telegram().allowedChatId(), clock);
     }
 
     @Bean
