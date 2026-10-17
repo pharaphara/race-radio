@@ -8,13 +8,14 @@ target/
 .env
 .env.*
 !.env.example
-athlete.yaml
+# Anchored to the root: an unanchored "llm/" also hid the source package bot/.../llm.
+/athlete.yaml
 *.db
 *.db-journal
 *.sqlite
-data/
-llm/
-photos/
+/data/
+/llm/
+/photos/
 
 # IDE
 .idea/

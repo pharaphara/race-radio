@@ -2,10 +2,10 @@
 .env
 .env.*
 !.env.example
-athlete.yaml
-data/
-llm/
-photos/
+/athlete.yaml
+/data/
+/llm/
+/photos/
 *.db
 # Build output and tooling
 **/target/

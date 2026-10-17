@@ -114,6 +114,18 @@ class RepositoryHygieneTest {
         assertThat(findings).as("use weighted average power, intensity, load, fitness, fatigue, form").isEmpty();
     }
 
+    @Test
+    void noSourceFileIsHiddenFromGitByAnIgnoreRule() throws Exception {
+        // An unanchored "llm/" in .gitignore once hid a whole source package: the repository then
+        // did not compile from a clean clone, and every check above simply never saw those files.
+        Process git = new ProcessBuilder("git", "ls-files", "--others", "--ignored", "--exclude-standard", "--directory")
+                .directory(root.toFile()).redirectErrorStream(true).start();
+        List<String> ignored = new String(git.getInputStream().readAllBytes(), StandardCharsets.UTF_8).lines()
+                .filter(l -> l.contains("/src/") || l.startsWith("knowledge/")).toList();
+        assertThat(git.waitFor()).isZero();
+        assertThat(ignored).as("source files ignored by git").isEmpty();
+    }
+
     private static List<Path> textFiles() {
         return publishable.stream()
                 .filter(p -> !EXEMPT.contains(relative(p)))
