@@ -39,6 +39,7 @@ public final class CommandRouter {
             /cout · les appels au modèle ce mois-ci
             /dernierenvoi · ce qui a été envoyé au modèle la dernière fois
             /aide · cette liste
+            Une photo du tableau Crossfit : je la lis et l'ajoute à ta séance du jour.
             Et sinon, écris-moi simplement : je réponds avec tes données du jour.""";
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
@@ -57,11 +58,14 @@ public final class CommandRouter {
     private final boolean dryRun;
     private final io.github.pharaphara.raceradio.bot.chat.Conversation conversation;
     private final io.github.pharaphara.raceradio.bot.store.Conversations memory;
+    private final io.github.pharaphara.raceradio.bot.strength.BoardReader boards;
 
     public CommandRouter(TelegramClient telegram, long chatId, MorningCheck morning, FeelStore feels, DecisionLog decisions,
                          Ledger ledger, Journal journal, CoachModel model, Clock clock, ZoneId zone, boolean dryRun,
                          io.github.pharaphara.raceradio.bot.chat.Conversation conversation,
-                         io.github.pharaphara.raceradio.bot.store.Conversations memory) {
+                         io.github.pharaphara.raceradio.bot.store.Conversations memory,
+                         io.github.pharaphara.raceradio.bot.strength.BoardReader boards) {
+        this.boards = boards;
         this.conversation = conversation;
         this.memory = memory;
         this.telegram = telegram;
@@ -80,6 +84,18 @@ public final class CommandRouter {
     public void handle(TelegramClient.Update u) {
         if (u.isCallback()) {
             telegram.acknowledge(u.callbackId(), "Reçu");
+            return;
+        }
+        if (u.hasPhoto()) {
+            String answer;
+            try {
+                answer = boards.read(telegram.download(u.photoFileId()), u.caption());
+            } catch (CoachModel.BudgetExhausted e) {
+                answer = "Le budget du modèle est atteint ce mois-ci : je ne peux pas lire la photo.";
+            } catch (RuntimeException e) {
+                answer = "Je n'ai pas pu lire la photo : " + e.getMessage();
+            }
+            telegram.send(chatId, answer);
             return;
         }
         String text = u.text() == null ? "" : u.text().strip();

@@ -31,6 +31,7 @@ public class TelegramClient {
 
     private final HttpClient http;
     private final String base;
+    private final String files;
 
     public TelegramClient(String token) {
         this(token, HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build(), URI.create("https://api.telegram.org/"));
@@ -39,12 +40,23 @@ public class TelegramClient {
     public TelegramClient(String token, HttpClient http, URI api) {
         this.http = http;
         this.base = api + "bot" + token + "/";
+        this.files = api + "file/bot" + token + "/";
     }
 
-    /** An incoming message or button press, reduced to what the coach uses. */
-    public record Update(long updateId, long chatId, String text, String callbackId, String callbackData) {
+    /**
+     * An incoming message or button press, reduced to what the coach uses.
+     *
+     * @param photoFileId the largest size of a photo sent, or null
+     * @param caption     the text sent with a photo, or null
+     */
+    public record Update(long updateId, long chatId, String text, String callbackId, String callbackData,
+                         String photoFileId, String caption) {
         public boolean isCallback() {
             return callbackId != null;
+        }
+
+        public boolean hasPhoto() {
+            return photoFileId != null;
         }
     }
 
@@ -58,12 +70,18 @@ public class TelegramClient {
             JsonNode msg = u.path("message");
             JsonNode cb = u.path("callback_query");
             if (msg.isObject()) {
-                out.add(new Update(id, msg.path("chat").path("id").asLong(), msg.path("text").asString(null), null, null));
+                String photo = null;
+                JsonNode sizes = msg.path("photo");
+                if (sizes.isArray() && !sizes.isEmpty()) {
+                    photo = sizes.get(sizes.size() - 1).path("file_id").asString(null);
+                }
+                out.add(new Update(id, msg.path("chat").path("id").asLong(), msg.path("text").asString(null), null, null,
+                        photo, msg.path("caption").asString(null)));
             } else if (cb.isObject()) {
                 out.add(new Update(id, cb.path("message").path("chat").path("id").asLong(), null,
-                        cb.path("id").asString(null), cb.path("data").asString(null)));
+                        cb.path("id").asString(null), cb.path("data").asString(null), null, null));
             } else {
-                out.add(new Update(id, 0, null, null, null));
+                out.add(new Update(id, 0, null, null, null, null, null));
             }
         }
         return out;
@@ -114,6 +132,28 @@ public class TelegramClient {
     private static void field(java.io.ByteArrayOutputStream out, String boundary, String name, String value) throws IOException {
         out.write(("--" + boundary + "\r\nContent-Disposition: form-data; name=\"" + name + "\"\r\n\r\n" + value + "\r\n")
                 .getBytes(StandardCharsets.UTF_8));
+    }
+
+    /** Downloads a file the athlete sent, such as a photo. */
+    public byte[] download(String fileId) {
+        JsonNode r = call("getFile", Map.of("file_id", fileId), Duration.ofSeconds(20));
+        String path = r.path("result").path("file_path").asString(null);
+        if (path == null) {
+            throw new IllegalStateException("Telegram getFile gave no path");
+        }
+        try {
+            HttpResponse<byte[]> res = http.send(HttpRequest.newBuilder(URI.create(files + path)).timeout(Duration.ofSeconds(60)).GET().build(),
+                    HttpResponse.BodyHandlers.ofByteArray());
+            if (res.statusCode() / 100 != 2) {
+                throw new IllegalStateException("Telegram file download failed: HTTP " + res.statusCode());
+            }
+            return res.body();
+        } catch (IOException e) {
+            throw new IllegalStateException("Telegram file download unreachable: " + e.getClass().getSimpleName());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Telegram file download interrupted");
+        }
     }
 
     public void acknowledge(String callbackId, String note) {

@@ -30,9 +30,12 @@ public class RunOnce implements ApplicationRunner {
     private final IntervalsClient intervals;
     private final ConfigurableApplicationContext context;
     private final java.nio.file.Path charts;
+    private final io.github.pharaphara.raceradio.bot.strength.BoardReader boards;
 
     public RunOnce(@Value("${race-radio.once:}") String once, MorningCheck morning, SessionReview review,
-                   IntervalsClient intervals, ConfigurableApplicationContext context, RaceRadioProperties props) {
+                   IntervalsClient intervals, ConfigurableApplicationContext context, RaceRadioProperties props,
+                   io.github.pharaphara.raceradio.bot.strength.BoardReader boards) {
+        this.boards = boards;
         this.charts = props.dataDir().resolve("charts");
         this.once = once;
         this.morning = morning;
@@ -57,11 +60,18 @@ public class RunOnce implements ApplicationRunner {
             SessionReview.Outcome o = review.review(a, false);
             print(o.message(), o.worded(), "structure " + o.facts().structureSource() + ", " + o.facts().repetitions());
             save(id, o.images());
+        } else if (once.startsWith("photo:")) {
+            try {
+                byte[] photo = java.nio.file.Files.readAllBytes(java.nio.file.Path.of(once.substring("photo:".length())));
+                System.out.println("\n" + boards.read(photo, null));
+            } catch (java.io.IOException e) {
+                throw new java.io.UncheckedIOException(e);
+            }
         } else if (once.equals("fitness")) {
             byte[] chart = morning.fitnessChart();
             save("fitness", chart == null ? java.util.List.of() : java.util.List.of(chart));
         } else {
-            throw new IllegalArgumentException("race-radio.once must be morning, fitness or review:<activity id>");
+            throw new IllegalArgumentException("race-radio.once must be morning, fitness, review:<activity id> or photo:<file>");
         }
         System.exit(SpringApplication.exit(context, () -> 0));
     }
