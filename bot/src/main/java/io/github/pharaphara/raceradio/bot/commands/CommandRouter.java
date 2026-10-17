@@ -1,0 +1,199 @@
+package io.github.pharaphara.raceradio.bot.commands;
+
+import io.github.pharaphara.raceradio.bot.llm.CoachModel;
+import io.github.pharaphara.raceradio.bot.llm.Journal;
+import io.github.pharaphara.raceradio.bot.morning.MorningCheck;
+import io.github.pharaphara.raceradio.bot.morning.Wording;
+import io.github.pharaphara.raceradio.bot.store.DecisionLog;
+import io.github.pharaphara.raceradio.bot.store.FeelStore;
+import io.github.pharaphara.raceradio.bot.store.Ledger;
+import io.github.pharaphara.raceradio.bot.telegram.TelegramClient;
+import io.github.pharaphara.raceradio.core.readiness.Feel;
+import io.github.pharaphara.raceradio.core.readiness.Readiness;
+import io.github.pharaphara.raceradio.core.readiness.Signal;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
+
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.Clock;
+import java.time.LocalDate;
+import java.time.YearMonth;
+import java.time.ZoneId;
+import java.util.Locale;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+/** Turns each message from the athlete into an answer. */
+public final class CommandRouter {
+
+    static final String HELP = """
+            Commandes :
+            /forme · le verdict calculé maintenant, sans rédaction
+            /aujourdhui · le message du matin, rédigé
+            /pourquoi · le détail de la dernière décision
+            /ressenti 4 3 4 4 5 · sommeil, énergie, courbatures, humeur, appétit, de 1 (mauvais) à 5 (bon)
+            /cout · les appels au modèle ce mois-ci
+            /dernierenvoi · ce qui a été envoyé au modèle la dernière fois
+            /aide · cette liste""";
+
+    private static final JsonMapper JSON = JsonMapper.builder().build();
+    private static final Pattern DATA_SOURCE = Pattern.compile("<data source=\"([^\"]+)\"");
+
+    private final TelegramClient telegram;
+    private final long chatId;
+    private final MorningCheck morning;
+    private final FeelStore feels;
+    private final DecisionLog decisions;
+    private final Ledger ledger;
+    private final Journal journal;
+    private final CoachModel model;
+    private final Clock clock;
+    private final ZoneId zone;
+    private final boolean dryRun;
+
+    public CommandRouter(TelegramClient telegram, long chatId, MorningCheck morning, FeelStore feels, DecisionLog decisions,
+                         Ledger ledger, Journal journal, CoachModel model, Clock clock, ZoneId zone, boolean dryRun) {
+        this.telegram = telegram;
+        this.chatId = chatId;
+        this.morning = morning;
+        this.feels = feels;
+        this.decisions = decisions;
+        this.ledger = ledger;
+        this.journal = journal;
+        this.model = model;
+        this.clock = clock;
+        this.zone = zone;
+        this.dryRun = dryRun;
+    }
+
+    public void handle(TelegramClient.Update u) {
+        if (u.isCallback()) {
+            telegram.acknowledge(u.callbackId(), "Reçu");
+            return;
+        }
+        String text = u.text() == null ? "" : u.text().strip();
+        String command = text.split("\\s+", 2)[0].toLowerCase(Locale.ROOT);
+        int at = command.indexOf('@');
+        if (at > 0) {
+            command = command.substring(0, at);
+        }
+        String answer = switch (command) {
+            case "/start", "/aide", "/help" -> HELP + (dryRun ? "\n\nMode sec : rien n'est écrit dans Intervals.icu." : "");
+            case "/forme" -> form();
+            case "/aujourdhui" -> morning.run(false).message();
+            case "/pourquoi" -> why();
+            case "/ressenti" -> feel(text);
+            case "/cout" -> cost();
+            case "/dernierenvoi" -> lastSent();
+            default -> "Je ne comprends que les commandes pour l'instant. La conversation libre arrive.\n\n" + HELP;
+        };
+        telegram.send(chatId, answer);
+    }
+
+    String form() {
+        Readiness r = morning.assess();
+        return Wording.deterministic(r) + "\n\nScore " + r.score() + "/100 · tempérament " + r.temperament().name().toLowerCase(Locale.ROOT);
+    }
+
+    String why() {
+        return decisions.latest().map(d -> {
+            StringBuilder b = new StringBuilder("Dernière décision : " + d.kind().toLowerCase(Locale.ROOT) + " du " + d.day());
+            JsonNode r = JSON.readTree(d.evidenceJson());
+            for (JsonNode s : r.path("signals")) {
+                Signal sig = JSON.convertValue(s, Signal.class);
+                b.append("\n• ").append(Wording.signal(sig));
+            }
+            for (JsonNode n : r.path("notes")) {
+                b.append("\n").append(Wording.note(n.asString()));
+            }
+            if (r.path("signals").isEmpty()) {
+                b.append("\nAucun signal : rien ne justifiait de lever le pied.");
+            }
+            b.append("\n\nModèle de décision : ").append(d.model());
+            b.append("\nVersion des consignes du coach : ").append(d.promptVersion());
+            return b.toString();
+        }).orElse("Aucune décision enregistrée pour l'instant.");
+    }
+
+    String feel(String text) {
+        Matcher m = Pattern.compile("([1-5])\\D+([1-5])\\D+([1-5])\\D+([1-5])\\D+([1-5])").matcher(text);
+        if (!m.find()) {
+            return "Donne cinq notes de 1 (mauvais) à 5 (bon) : sommeil, énergie, courbatures, humeur, appétit.\nExemple : /ressenti 4 3 4 4 5";
+        }
+        Feel f = new Feel(Integer.parseInt(m.group(1)), Integer.parseInt(m.group(2)), Integer.parseInt(m.group(3)),
+                Integer.parseInt(m.group(4)), Integer.parseInt(m.group(5)));
+        feels.save(LocalDate.now(clock), f, clock.instant());
+        return "Noté pour aujourd'hui : sommeil " + f.sleep() + ", énergie " + f.energy() + ", courbatures " + f.soreness()
+                + ", humeur " + f.mood() + ", appétit " + f.appetite() + "." + (f.lowDimensions() >= 2
+                ? "\nDeux points bas ou plus : j'en tiens compte pour la journée." : "");
+    }
+
+    String cost() {
+        YearMonth month = YearMonth.now(clock.withZone(zone));
+        var totals = ledger.totals(month, zone);
+        BigDecimal spent = model.spentThisMonth();
+        boolean subscription = "subscription".equals(model.billing());
+        StringBuilder b = new StringBuilder("Modèle, " + month + " :");
+        if (totals.isEmpty()) {
+            b.append("\nAucun appel ce mois-ci.");
+        }
+        long cacheRead = 0;
+        long input = 0;
+        for (Ledger.PurposeTotal t : totals) {
+            b.append(String.format(Locale.FRANCE, "%n• %s : %d appel(s), %s $", purpose(t.purpose()), t.calls(), dollars(t.cost())));
+            cacheRead += t.cacheRead();
+            input += t.input() + t.cacheWrite() + t.cacheRead();
+        }
+        b.append(String.format(Locale.FRANCE, "%nTotal %s $ sur un plafond de %s $", dollars(spent), dollars(model.budget())));
+        if (input > 0) {
+            b.append(String.format(Locale.FRANCE, "%nLu en cache : %d %% de l'entrée", Math.round(100.0 * cacheRead / input)));
+        }
+        b.append(subscription
+                ? "\nAbonnement Claude : rien n'est facturé à l'appel ; montants au prix catalogue de l'API, pour protéger tes quotas."
+                : "\nAPI : montants facturés, au prix configuré.");
+        return b.toString();
+    }
+
+    String lastSent() {
+        return journal.last().map(line -> {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> req = (Map<String, Object>) line.get("request");
+            @SuppressWarnings("unchecked")
+            Map<String, Object> reply = (Map<String, Object>) line.get("reply");
+            String content = String.valueOf(req.get("userContent"));
+            StringBuilder sources = new StringBuilder();
+            Matcher m = DATA_SOURCE.matcher(content);
+            while (m.find()) {
+                sources.append(sources.isEmpty() ? "" : ", ").append(m.group(1));
+            }
+            @SuppressWarnings("unchecked")
+            Map<String, Object> usage = reply == null ? Map.of() : (Map<String, Object>) reply.get("usage");
+            return "Dernier envoi au modèle (" + line.get("at") + ")"
+                    + "\n• but : " + purpose(String.valueOf(req.get("purpose")))
+                    + "\n• modèle : " + req.get("model") + ", effort " + req.get("effort")
+                    + "\n• consignes du coach : version " + req.get("promptVersion")
+                    + "\n• message : " + content.length() + " caractères"
+                    + "\n• données jointes : " + (sources.isEmpty() ? "aucune" : sources)
+                    + "\n• jetons : entrée " + usage.get("input") + ", sortie " + usage.get("output")
+                    + ", cache écrit " + usage.get("cacheWrite") + ", cache lu " + usage.get("cacheRead")
+                    + (line.get("error") != null ? "\n• erreur : " + line.get("error") : "")
+                    + "\nLe contenu intégral est dans le journal, sur le serveur.";
+        }).orElse("Aucun envoi au modèle pour l'instant.");
+    }
+
+    private static String purpose(String p) {
+        return switch (p) {
+            case "MORNING" -> "message du matin";
+            case "REVIEW" -> "analyse de séance";
+            case "CHAT" -> "conversation";
+            case "PHOTO" -> "lecture de photo";
+            default -> p;
+        };
+    }
+
+    private static String dollars(BigDecimal d) {
+        return d.setScale(d.compareTo(BigDecimal.ONE) < 0 ? 4 : 2, RoundingMode.HALF_UP).toPlainString();
+    }
+}

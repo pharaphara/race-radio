@@ -134,10 +134,10 @@ public final class ReadinessModel {
         long typical = Math.round(Math.exp(mean));
         if (z < -HRV_STRONG_SD) {
             signals.add(new Signal(SignalKind.HRV_TODAY, Severity.STRONG, String.format(
-                    "HRV %.0f ms this morning, %.1f standard deviations below your usual %d ms", today.hrv(), -z, typical), Signal.Registry.STATISTICAL));
+                    "HRV %.0f ms this morning, %.1f standard deviations below your usual %d ms", today.hrv(), -z, typical), Signal.Registry.STATISTICAL, today.hrv(), (double) typical));
         } else if (z < -HRV_MILD_SD) {
             signals.add(new Signal(SignalKind.HRV_TODAY, Severity.MILD, String.format(
-                    "HRV %.0f ms this morning, below your usual %d ms", today.hrv(), typical), Signal.Registry.STATISTICAL));
+                    "HRV %.0f ms this morning, below your usual %d ms", today.hrv(), typical), Signal.Registry.STATISTICAL, today.hrv(), (double) typical));
         }
         // The seven mornings before today. Including today would let one collapsed morning count
         // twice, once as the acute signal and again by dragging the weekly mean down.
@@ -145,7 +145,7 @@ public final class ReadinessModel {
         double[] weekLogs = week.stream().filter(d -> d.hrv() != null && d.hrv() > 0).mapToDouble(d -> Math.log(d.hrv())).toArray();
         if (weekLogs.length == TREND_DAYS && mean(weekLogs) < mean - HRV_TREND_SD * sd) {
             signals.add(new Signal(SignalKind.HRV_TREND, Severity.MILD, String.format(
-                    "HRV averaged %.0f ms over the previous seven days, under your normal range", Math.exp(mean(weekLogs))), Signal.Registry.STATISTICAL));
+                    "HRV averaged %.0f ms over the previous seven days, under your normal range", Math.exp(mean(weekLogs))), Signal.Registry.STATISTICAL, Math.exp(mean(weekLogs)), (double) Math.round(Math.exp(mean))));
         }
     }
 
@@ -164,10 +164,10 @@ public final class ReadinessModel {
         double delta = today.restingHeartRate() - usual;
         if (delta >= RESTING_HR_STRONG_BPM) {
             signals.add(new Signal(SignalKind.RESTING_HEART_RATE, Severity.STRONG, String.format(
-                    "resting heart rate %d, %.0f above your usual %.0f", today.restingHeartRate(), delta, usual), Signal.Registry.CONVENTION));
+                    "resting heart rate %d, %.0f above your usual %.0f", today.restingHeartRate(), delta, usual), Signal.Registry.CONVENTION, (double) today.restingHeartRate(), usual));
         } else if (delta >= RESTING_HR_MILD_BPM) {
             signals.add(new Signal(SignalKind.RESTING_HEART_RATE, Severity.MILD, String.format(
-                    "resting heart rate %d, %.0f above your usual %.0f", today.restingHeartRate(), delta, usual), Signal.Registry.CONVENTION));
+                    "resting heart rate %d, %.0f above your usual %.0f", today.restingHeartRate(), delta, usual), Signal.Registry.CONVENTION, (double) today.restingHeartRate(), usual));
         } else if (delta <= RESTING_HR_LOW_NOTE_BPM) {
             notes.add(String.format("Resting heart rate %d is unusually low against your usual %.0f. Coaches sometimes see this before an illness; on its own it means nothing.",
                     today.restingHeartRate(), usual));
@@ -183,9 +183,9 @@ public final class ReadinessModel {
         }
         String what = describeSleep(secs, score);
         if ((secs != null && secs < SLEEP_STRONG_SECONDS) || (score != null && score < SLEEP_SCORE_STRONG)) {
-            signals.add(new Signal(SignalKind.SLEEP, Severity.STRONG, "a very poor night: " + what, Signal.Registry.CONVENTION));
+            signals.add(new Signal(SignalKind.SLEEP, Severity.STRONG, "a very poor night: " + what, Signal.Registry.CONVENTION, secs == null ? null : secs / 3600.0, score));
         } else if ((secs != null && secs < SLEEP_MILD_SECONDS) || (score != null && score < SLEEP_SCORE_MILD)) {
-            signals.add(new Signal(SignalKind.SLEEP, Severity.MILD, "a short or poor night: " + what, Signal.Registry.CONVENTION));
+            signals.add(new Signal(SignalKind.SLEEP, Severity.MILD, "a short or poor night: " + what, Signal.Registry.CONVENTION, secs == null ? null : secs / 3600.0, score));
         }
     }
 
@@ -196,7 +196,7 @@ public final class ReadinessModel {
         double form = in.fitness() - in.fatigue();
         if (form < FORM_STRONG) {
             signals.add(new Signal(SignalKind.FORM, Severity.STRONG, String.format(
-                    "form at %.0f: fatigue is far above fitness", form), Signal.Registry.CONVENTION));
+                    "form at %.0f: fatigue is far above fitness", form), Signal.Registry.CONVENTION, form, null));
         }
     }
 
@@ -207,7 +207,7 @@ public final class ReadinessModel {
         if (in.loadLast3Days() > RECENT_LOAD_FACTOR * in.fitness()) {
             signals.add(new Signal(SignalKind.RECENT_LOAD, Severity.MILD, String.format(
                     "%.0f of load over the last three days, a heavy block for your fitness of %.0f", in.loadLast3Days(), in.fitness()),
-                    Signal.Registry.CONVENTION));
+                    Signal.Registry.CONVENTION, in.loadLast3Days(), in.fitness()));
         }
     }
 
@@ -223,10 +223,10 @@ public final class ReadinessModel {
             String why = f.sleepAndMoodBothLow() ? "you report both poor sleep and low mood, which reads as exhaustion"
                     : lowForDays ? "you have reported feeling low for three days running"
                     : "you report feeling low on " + f.lowDimensions() + " of five counts";
-            return new Signal(SignalKind.FEEL, Severity.STRONG, why, Signal.Registry.CONVENTION);
+            return new Signal(SignalKind.FEEL, Severity.STRONG, why, Signal.Registry.CONVENTION, (double) f.lowDimensions(), null);
         }
         if (f.lowDimensions() == 2) {
-            return new Signal(SignalKind.FEEL, Severity.MILD, "you report feeling low on two of five counts", Signal.Registry.CONVENTION);
+            return new Signal(SignalKind.FEEL, Severity.MILD, "you report feeling low on two of five counts", Signal.Registry.CONVENTION, (double) f.lowDimensions(), null);
         }
         return null;
     }

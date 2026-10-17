@@ -1,0 +1,57 @@
+# Defaults. Secrets come from the environment: see .env.example.
+spring:
+  application:
+    name: race-radio
+  datasource:
+    url: jdbc:sqlite:${race-radio.data-dir}/race-radio.db
+    driver-class-name: org.sqlite.JDBC
+  sql:
+    init:
+      mode: always
+  main:
+    banner-mode: off
+
+server:
+  port: ${RACE_RADIO_PORT:8790}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+
+race-radio:
+  # Nothing is written to Intervals.icu until this is explicitly switched off.
+  dry-run: ${RACE_RADIO_DRY_RUN:true}
+  zone: Europe/Paris
+  data-dir: ${RACE_RADIO_DATA_DIR:./data}
+  temperament: COMMITTED
+  telegram:
+    token: ${TELEGRAM_TOKEN:}
+    allowed-chat-id: ${TELEGRAM_ALLOWED_CHAT_ID:0}
+  intervals:
+    athlete-id: ${INTERVALS_ATHLETE_ID:}
+    api-key: ${INTERVALS_API_KEY:}
+  model:
+    # subscription: Claude Code command line, authenticated by `claude setup-token` and
+    # CLAUDE_CODE_OAUTH_TOKEN. api: Anthropic API, billed per token, needs ANTHROPIC_API_KEY.
+    transport: ${RACE_RADIO_MODEL_TRANSPORT:subscription}
+    claude-command: ${CLAUDE_COMMAND:claude}
+    api-key: ${ANTHROPIC_API_KEY:}
+    name: claude-sonnet-5-5
+    morning-effort: low
+    review-effort: medium
+    fallbacks: true
+    # Dollars at list price. On a subscription nothing is billed; this protects the usage limits.
+    monthly-budget: 10.00
+    journal-days: 30
+    # Dollars per million tokens, Anthropic list prices as of October 2026. Check before relying on them.
+    # Cache writes are priced for the one-hour lifetime this service uses.
+    prices:
+      claude-sonnet-5-5: { input: 2.00, output: 10.00, cache-write: 4.00, cache-read: 0.20 }
+      claude-opus-5-5: { input: 4.00, output: 20.00, cache-write: 8.00, cache-read: 0.20 }
+  schedule:
+    morning-at: "07:00"
+    watch-from: "06:00"
+    watch-until: "23:00"
+    watch-every-minutes: 15
