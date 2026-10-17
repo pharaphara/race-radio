@@ -46,6 +46,9 @@ class RepositoryHygieneTest {
     private static final Pattern TRADEMARKS = Pattern.compile(
             "\\b(NP|TSS|IF|CTL|ATL|TSB|rTSS|hrTSS|sTSS)\\b|Normalized Power|Training Stress (Score|Balance)|Intensity Factor");
 
+    /** Keys of the .env whose values must never be published. */
+    private static final Pattern SECRET_KEYS = Pattern.compile("(?i)key|token|secret|password|_id$");
+
     private static Path root;
     private static List<Path> publishable;
 
@@ -80,9 +83,11 @@ class RepositoryHygieneTest {
         if (!Files.exists(env)) {
             return;
         }
+        // Only secrets and identifiers: a setting such as the model transport is public by design.
         List<String> values = Files.readAllLines(env).stream()
                 .map(String::strip)
                 .filter(l -> !l.startsWith("#") && l.contains("="))
+                .filter(l -> SECRET_KEYS.matcher(l.substring(0, l.indexOf('='))).find())
                 .map(l -> l.substring(l.indexOf('=') + 1).strip().replace("\"", ""))
                 .filter(v -> v.length() >= 8)
                 .toList();
