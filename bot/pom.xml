@@ -64,6 +64,23 @@
   </dependencies>
 
   <build>
+    <resources>
+      <!-- Default resource root, restated because declaring <resources> replaces it. -->
+      <resource>
+        <directory>src/main/resources</directory>
+      </resource>
+      <!--
+        The knowledge base lives at the repository root, readable without opening the code, and is
+        copied onto the classpath at build time rather than duplicated.
+      -->
+      <resource>
+        <directory>${project.basedir}/../knowledge</directory>
+        <targetPath>knowledge</targetPath>
+        <includes>
+          <include>*.md</include>
+        </includes>
+      </resource>
+    </resources>
     <plugins>
       <plugin>
         <groupId>org.springframework.boot</groupId>

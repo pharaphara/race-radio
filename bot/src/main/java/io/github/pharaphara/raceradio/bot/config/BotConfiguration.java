@@ -40,7 +40,9 @@ public class BotConfiguration {
     private static final Logger LOG = LoggerFactory.getLogger(BotConfiguration.class);
 
     /** Standing instructions, then the knowledge base, in this order. */
-    static final List<String> PROMPT = List.of("prompt/voice.md");
+    static final List<String> PROMPT = List.of("prompt/voice.md", "knowledge/README.md", "knowledge/readiness.md",
+            "knowledge/load.md", "knowledge/zones.md", "knowledge/bike.md", "knowledge/run.md", "knowledge/swim.md",
+            "knowledge/strength.md", "knowledge/periodization.md", "knowledge/sessions.md");
 
     private final RaceRadioProperties props;
 

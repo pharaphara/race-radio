@@ -18,6 +18,11 @@ Adapted content
   that every recommendation names its basis, and the choice of plain names over trademarked
   abbreviations.
 
+- Section 11, by CrankAddict (MIT), https://github.com/CrankAddict/section-11, protocol v11.75
+  Rules adapted into knowledge/: sleep judged on duration rather than on the device's score,
+  calendar illness and injury markers as escalation-only health context, negative form as the
+  mechanism of adaptation rather than an alarm, and several of the references it cites.
+
 Read, not copied
 ----------------
 - GoldenCheetah (GPL v2), https://github.com/GoldenCheetah/GoldenCheetah
