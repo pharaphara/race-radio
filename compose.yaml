@@ -1,0 +1,22 @@
+services:
+  race-radio:
+    image: ghcr.io/pharaphara/race-radio:latest
+    # Contributors: comment the image line and uncomment this one.
+    # build: .
+    # Secrets live in .env next to this file, never in the image. See .env.example.
+    env_file: .env
+    environment:
+      TZ: Europe/Paris
+    volumes:
+      # Decisions, conversations, the model journal, photos and charts.
+      - race-radio-data:/data
+    ports:
+      # Health only, for now. Bound to localhost: put a reverse proxy in front to expose anything.
+      - "127.0.0.1:8790:8790"
+    # A hard ceiling. Without one, a container on a busy host competes for memory until the host
+    # thrashes instead of killing anything.
+    mem_limit: 1g
+    restart: unless-stopped
+
+volumes:
+  race-radio-data:

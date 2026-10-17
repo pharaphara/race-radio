@@ -1,0 +1,15 @@
+# Secrets and personal data never enter the build context, so they can never enter the image.
+.env
+.env.*
+!.env.example
+athlete.yaml
+data/
+llm/
+photos/
+*.db
+# Build output and tooling
+**/target/
+.git/
+.github/
+.idea/
+*.iml
