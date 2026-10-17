@@ -147,6 +147,52 @@ public final class IntervalsWriter {
         write("PUT", "activity/" + activityId + "/intervals", body);
     }
 
+    /**
+     * Replaces an activity's streams, which makes Intervals.icu recompute everything derived from
+     * them. Latitude and longitude travel together as one {@code latlng} stream, latitudes in
+     * {@code data} and longitudes in {@code data2}. A missing reading is sent as null: JSON has no NaN.
+     */
+    public void replaceStreams(String activityId, Map<String, double[]> columns) {
+        List<Map<String, Object>> body = new ArrayList<>();
+        for (Map.Entry<String, double[]> e : columns.entrySet()) {
+            if (e.getKey().equals("lat") || e.getKey().equals("lng")) {
+                continue;
+            }
+            Map<String, Object> stream = new LinkedHashMap<>();
+            stream.put("type", e.getKey());
+            stream.put("data", nullable(e.getValue()));
+            body.add(stream);
+        }
+        if (columns.containsKey("lat") && columns.containsKey("lng")) {
+            Map<String, Object> latlng = new LinkedHashMap<>();
+            latlng.put("type", "latlng");
+            latlng.put("data", nullable(columns.get("lat")));
+            latlng.put("data2", nullable(columns.get("lng")));
+            body.add(latlng);
+        }
+        write("PUT", "activity/" + activityId + "/streams", body);
+    }
+
+    /**
+     * Deletes an activity. Activities come from the watch and carry no ownership mark, so this is
+     * offered only to the merge, after the athlete confirmed it on Telegram, and only once its
+     * content lives on in the activity it was merged into.
+     */
+    public void deleteMergedActivity(String activityId, String mergedInto) {
+        if (activityId.equals(mergedInto)) {
+            throw new IllegalArgumentException("an activity cannot be merged into itself");
+        }
+        write("DELETE", "activity/" + activityId, null);
+    }
+
+    private static List<Double> nullable(double[] v) {
+        List<Double> out = new ArrayList<>(v.length);
+        for (double x : v) {
+            out.add(Double.isNaN(x) ? null : x);
+        }
+        return out;
+    }
+
     /** Posts the session review under the activity, where it stays next to the data. */
     public void comment(String activityId, String text) {
         write("POST", "activity/" + activityId + "/messages", Map.of("content", text));

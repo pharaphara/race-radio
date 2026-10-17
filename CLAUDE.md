@@ -24,7 +24,7 @@ A self-hosted triathlon coach on Telegram, backed by Intervals.icu. Public repos
   reproduces Intervals.icu's fatigue exactly and its fitness within 0.1; the linear `1/n` form
   drifts by close to 3. Ramp is fitness today minus fitness 7 days earlier.
 - Streams come from `streams.csv`: it starts with a UTF-8 BOM, and it carries `lat` and `lng` as two
-  columns, whereas the filtered JSON `latlng` stream was observed to return latitudes only.
+  columns. The JSON `latlng` stream holds latitudes in `data` and longitudes in `data2`.
 - Planned workouts reach the watch only if the athlete's `icu_garmin_upload_workouts` is true, and
   only if Intervals.icu filled `workout_doc`, which means it understood the description.
 - There is no webhook in the API: new activities are found by polling.

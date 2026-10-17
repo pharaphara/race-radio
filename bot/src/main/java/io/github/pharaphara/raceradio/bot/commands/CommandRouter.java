@@ -39,6 +39,7 @@ public final class CommandRouter {
             /sports natation off · les sports de la saison
             /mode planifier · ajuster · analyser
             /plan · la semaine prochaine et la faisabilité
+            /fusionner i123 i124 · recoller une séance coupée en deux (avec confirmation)
             /note j'ai mal au mollet gauche · un fait que le coach doit garder en tête
             /notes · les faits gardés · /oubli 3 · en retirer un
             /cout · les appels au modèle ce mois-ci
@@ -66,6 +67,7 @@ public final class CommandRouter {
     private final io.github.pharaphara.raceradio.bot.strength.BoardReader boards;
     private final io.github.pharaphara.raceradio.bot.plan.PlanCommands planCommands;
     private final io.github.pharaphara.raceradio.bot.plan.Adapter adapter;
+    private final io.github.pharaphara.raceradio.bot.merge.Merger merger;
 
     public CommandRouter(TelegramClient telegram, long chatId, MorningCheck morning, FeelStore feels, DecisionLog decisions,
                          Ledger ledger, Journal journal, CoachModel model, Clock clock, ZoneId zone, boolean dryRun,
@@ -73,7 +75,9 @@ public final class CommandRouter {
                          io.github.pharaphara.raceradio.bot.store.Conversations memory,
                          io.github.pharaphara.raceradio.bot.strength.BoardReader boards,
                          io.github.pharaphara.raceradio.bot.plan.PlanCommands planCommands,
-                         io.github.pharaphara.raceradio.bot.plan.Adapter adapter) {
+                         io.github.pharaphara.raceradio.bot.plan.Adapter adapter,
+                         io.github.pharaphara.raceradio.bot.merge.Merger merger) {
+        this.merger = merger;
         this.adapter = adapter;
         this.boards = boards;
         this.planCommands = planCommands;
@@ -95,6 +99,18 @@ public final class CommandRouter {
     public void handle(TelegramClient.Update u) {
         if (u.isCallback()) {
             String data = u.callbackData() == null ? "" : u.callbackData();
+            if (data.startsWith("merge:")) {
+                String[] ids = data.substring(6).split(":");
+                String answer;
+                try {
+                    answer = merger.merge(ids[0], ids[1]);
+                } catch (RuntimeException e) {
+                    answer = "La fusion a échoué : " + e.getMessage();
+                }
+                telegram.acknowledge(u.callbackId(), "Fusion");
+                telegram.send(chatId, answer);
+                return;
+            }
             if (data.startsWith("undo:")) {
                 String answer;
                 try {
@@ -140,11 +156,18 @@ public final class CommandRouter {
             case "/sports" -> planCommands.sports(text);
             case "/mode" -> planCommands.mode(text);
             case "/plan" -> planCommands.plan();
+            case "/fusionner" -> {
+                merge(text);
+                yield null;
+            }
             case "/note" -> note(text);
             case "/notes" -> notes();
             case "/oubli" -> forget(text);
             default -> command.startsWith("/") ? "Commande inconnue.\n\n" + HELP : conversation.answer(text);
         };
+        if (answer == null) {
+            return;
+        }
         telegram.send(chatId, answer);
         if (command.equals("/forme")) {
             try {
@@ -161,6 +184,27 @@ public final class CommandRouter {
     String form() {
         Readiness r = morning.assess();
         return Wording.deterministic(r) + "\n\nScore " + r.score() + "/100 · tempérament " + r.temperament().name().toLowerCase(Locale.ROOT);
+    }
+
+    /** Shows the preview, with a confirmation button only when the merge is possible. */
+    void merge(String text) {
+        Matcher m = Pattern.compile("(i?\\d+)\\s+(i?\\d+)").matcher(text);
+        if (!m.find()) {
+            telegram.send(chatId, "Donne les deux numéros d'activité, tels qu'Intervals.icu les affiche : /fusionner i123 i124");
+            return;
+        }
+        String a = m.group(1).startsWith("i") ? m.group(1) : "i" + m.group(1);
+        String b = m.group(2).startsWith("i") ? m.group(2) : "i" + m.group(2);
+        try {
+            var p = merger.preview(a, b);
+            if (p.possible()) {
+                telegram.sendWithButtons(chatId, p.text(), Map.of("Confirmer la fusion", "merge:" + p.first().id() + ":" + p.second().id()));
+            } else {
+                telegram.send(chatId, p.text());
+            }
+        } catch (RuntimeException e) {
+            telegram.send(chatId, "Je n'ai pas pu lire ces activités : " + e.getMessage());
+        }
     }
 
     String note(String text) {

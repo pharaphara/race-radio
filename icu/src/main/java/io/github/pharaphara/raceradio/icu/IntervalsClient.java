@@ -76,6 +76,11 @@ public class IntervalsClient {
         return get(athletePath("events?oldest=" + from + "&newest=" + to), new TypeReference<>() { });
     }
 
+    /** One activity's summary. */
+    public ActivitySummary activity(String activityId) {
+        return get("activity/" + activityId, new TypeReference<>() { });
+    }
+
     /** Intervals.icu's own interval detection for an activity, WORK and RECOVERY alike. */
     public List<ActivityInterval> intervals(String activityId) {
         JsonNode root = get("activity/" + activityId + "/intervals", new TypeReference<>() { });
@@ -86,8 +91,8 @@ public class IntervalsClient {
 
     /**
      * Every stream of an activity, read from the CSV export rather than the JSON one. The CSV
-     * carries latitude and longitude as two proper columns; the JSON {@code latlng} stream, when
-     * filtered, was observed to return latitudes only.
+     * carries latitude and longitude as two plain columns; the JSON {@code latlng} stream keeps
+     * latitudes in {@code data} and longitudes in a second array, {@code data2}, which is easy to miss.
      */
     public ActivityStreams streams(String activityId) {
         return parseStreamsCsv(send(request("activity/" + activityId + "/streams.csv")));
