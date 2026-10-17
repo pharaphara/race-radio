@@ -82,7 +82,8 @@ public final class Conversation {
                 Be brief: one to three sentences unless they ask for more. Use only the data given.
                 You cannot change the plan, a workout or a verdict from here. If they ask for that, say which
                 command does it: /ressenti to report how they feel, /note to keep a fact, /aujourdhui to redo
-                the morning call. If they report pain that persists, or a warning sign, recommend a health
+                the morning call, /seance followed by the day and the workout to create one workout
+                (for example: /seance demain vélo 1h endurance). If they report pain that persists, or a warning sign, recommend a health
                 professional, once and plainly.
                 Context computed by the program:
                 %s

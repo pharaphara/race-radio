@@ -39,6 +39,7 @@ public final class CommandRouter {
             /sports natation off · les sports de la saison
             /mode planifier · ajuster · analyser
             /plan · la semaine prochaine et la faisabilité
+            /seance demain vélo 3x10min à 280W · une séance à la demande, montrée avant publication
             /fusionner i123 i124 · recoller une séance coupée en deux (avec confirmation)
             /note j'ai mal au mollet gauche · un fait que le coach doit garder en tête
             /notes · les faits gardés · /oubli 3 · en retirer un
@@ -68,6 +69,7 @@ public final class CommandRouter {
     private final io.github.pharaphara.raceradio.bot.plan.PlanCommands planCommands;
     private final io.github.pharaphara.raceradio.bot.plan.Adapter adapter;
     private final io.github.pharaphara.raceradio.bot.merge.Merger merger;
+    private final io.github.pharaphara.raceradio.bot.plan.SessionCreator sessions;
 
     public CommandRouter(TelegramClient telegram, long chatId, MorningCheck morning, FeelStore feels, DecisionLog decisions,
                          Ledger ledger, Journal journal, CoachModel model, Clock clock, ZoneId zone, boolean dryRun,
@@ -76,7 +78,9 @@ public final class CommandRouter {
                          io.github.pharaphara.raceradio.bot.strength.BoardReader boards,
                          io.github.pharaphara.raceradio.bot.plan.PlanCommands planCommands,
                          io.github.pharaphara.raceradio.bot.plan.Adapter adapter,
-                         io.github.pharaphara.raceradio.bot.merge.Merger merger) {
+                         io.github.pharaphara.raceradio.bot.merge.Merger merger,
+                         io.github.pharaphara.raceradio.bot.plan.SessionCreator sessions) {
+        this.sessions = sessions;
         this.merger = merger;
         this.adapter = adapter;
         this.boards = boards;
@@ -99,6 +103,11 @@ public final class CommandRouter {
     public void handle(TelegramClient.Update u) {
         if (u.isCallback()) {
             String data = u.callbackData() == null ? "" : u.callbackData();
+            if (sessions.handles(data)) {
+                telegram.acknowledge(u.callbackId(), "Reçu");
+                sessions.callback(data);
+                return;
+            }
             if (data.startsWith("merge:")) {
                 String[] ids = data.substring(6).split(":");
                 String answer;
@@ -156,6 +165,10 @@ public final class CommandRouter {
             case "/sports" -> planCommands.sports(text);
             case "/mode" -> planCommands.mode(text);
             case "/plan" -> planCommands.plan();
+            case "/seance", "/séance" -> {
+                sessions.draft(text);
+                yield null;
+            }
             case "/fusionner" -> {
                 merge(text);
                 yield null;
@@ -328,6 +341,7 @@ public final class CommandRouter {
             case "REVIEW" -> "analyse de séance";
             case "CHAT" -> "conversation";
             case "PHOTO" -> "lecture de photo";
+            case "SESSION" -> "séance à la demande";
             default -> p;
         };
     }
