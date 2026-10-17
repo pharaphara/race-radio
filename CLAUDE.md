@@ -4,6 +4,8 @@ A self-hosted triathlon coach on Telegram, backed by Intervals.icu. Public repos
 
 ## Rules that break the project if ignored
 
+0. **Never ignore a source folder.** Ignore patterns are anchored to the root; an unanchored `llm/`
+   once hid a whole source package. A test fails if git ignores anything under `src/` or `knowledge/`.
 1. **`core` computes, and only computes.** No Spring, no HTTP, no LLM, no runtime dependency.
    Every number the coach states comes from here. The model interprets; it never calculates.
 2. **Public repository.** No athlete id, token, key, GPS trace or real threshold enters git.
@@ -34,3 +36,13 @@ A self-hosted triathlon coach on Telegram, backed by Intervals.icu. Public repos
   an OAuth session. Validation therefore happens after publication, by re-reading `workout_doc`;
   a created event can be downloaded as .zwo through `events/{id}/download.zwo`.
 - Distances are written `400mtr` in workout text, because `m` means minutes.
+- Claude Code through a subscription: never `--bare` (API key only). Without `--disable-slash-commands`,
+  `--setting-sources ""` and `--strict-mcp-config`, a one-word call wrote 30,711 tokens to cache;
+  with them, 573. The model may read anything in its working directory and is refused elsewhere, so
+  a photo is read from a directory holding only that photo.
+- Readiness was replayed on a year of real wellness: about 80% green, under 5% red, both recorded
+  illnesses red on their first morning. Change a threshold only after replaying it.
+- The interval detector was judged on seven real sessions. Laps cut by a structured workout are the
+  truth when half the planned steps match exactly; detection is for sessions without them.
+- Docker: built and published by CI to ghcr.io/pharaphara/race-radio. There is no Docker on the
+  development PC; the CI build is the check that the image builds.
