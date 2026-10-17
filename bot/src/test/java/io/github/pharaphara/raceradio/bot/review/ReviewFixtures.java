@@ -85,7 +85,7 @@ final class ReviewFixtures {
     }
 
     static CalendarEvent plannedRide(String docJson) {
-        return new CalendarEvent(1L, START.toLocalDate().atStartOfDay(), "WORKOUT", "Ride", "VO2", "", "race-radio-x", 3600, 70,
+        return new CalendarEvent(1L, START.toLocalDate().atStartOfDay(), null, "WORKOUT", "Ride", "VO2", "", "race-radio-x", 3600, 70,
                 JsonMapper.builder().build().readTree(docJson));
     }
 }

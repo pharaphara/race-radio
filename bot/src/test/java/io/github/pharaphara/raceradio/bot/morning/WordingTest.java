@@ -38,7 +38,12 @@ class WordingTest {
     }
 
     private static Readiness run(DayRecord today, double weekHrv, Double fitness, Double fatigue, double load3, Feel feel) {
-        return ReadinessModel.assess(new ReadinessInput(month(today, weekHrv), fitness, fatigue, load3, feel, List.of()), Temperament.COMMITTED);
+        return run(today, weekHrv, fitness, fatigue, load3, feel, io.github.pharaphara.raceradio.core.readiness.HealthContext.NONE);
+    }
+
+    private static Readiness run(DayRecord today, double weekHrv, Double fitness, Double fatigue, double load3, Feel feel,
+                                 io.github.pharaphara.raceradio.core.readiness.HealthContext h) {
+        return ReadinessModel.assess(new ReadinessInput(month(today, weekHrv), fitness, fatigue, load3, feel, List.of(), h), Temperament.COMMITTED);
     }
 
     @Test
@@ -50,7 +55,12 @@ class WordingTest {
                 run(new DayRecord(TODAY, 50.0, 48, 27_000, 80.0), 50, 40.0, 38.0, 0, new Feel(4, 2, 2, 4, 4)),
                 run(new DayRecord(TODAY, 22.0, 48, 3 * 3600, 19.0), 50, 40.0, 38.0, 0, new Feel(5, 5, 5, 5, 5)),
                 run(new DayRecord(TODAY, 50.0, 43, 27_000, 80.0), 50, 40.0, 38.0, 0, null),
-                run(new DayRecord(TODAY, null, null, null, null), 50, null, null, 0, null));
+                run(new DayRecord(TODAY, null, null, null, null), 50, null, null, 0, null),
+                run(new DayRecord(TODAY, 50.0, 48, 27_000, 80.0), 50, 40.0, 38.0, 0, null,
+                        new io.github.pharaphara.raceradio.core.readiness.HealthContext(true, null, "ILLNESS")),
+                run(new DayRecord(TODAY, 50.0, 48, 27_000, 80.0), 50, 40.0, 38.0, 0, null,
+                        new io.github.pharaphara.raceradio.core.readiness.HealthContext(false, 2, "INJURY")),
+                run(new DayRecord(TODAY, 50.0, 48, null, 80.0), 50, 40.0, 38.0, 0, null));
 
         Set<SignalKind> seen = EnumSet.noneOf(SignalKind.class);
         for (Readiness r : scenarios) {

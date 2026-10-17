@@ -69,7 +69,32 @@ class MorningCheckTest {
             public List<ActivitySummary> activities(LocalDate from, LocalDate to) {
                 return List.of();
             }
+
+            @Override
+            public List<io.github.pharaphara.raceradio.icu.model.CalendarEvent> events(LocalDate from, LocalDate to) {
+                return calendar;
+            }
         };
+    }
+
+    private List<io.github.pharaphara.raceradio.icu.model.CalendarEvent> calendar = List.of();
+
+    @Test
+    void anIllnessMarkedTodayRulesOutAnUnqualifiedGreenAndIsAskedAbout() {
+        calendar = List.of(new io.github.pharaphara.raceradio.icu.model.CalendarEvent(9L, TODAY.atStartOfDay(),
+                TODAY.plusDays(1).atStartOfDay(), "SICK", null, "Fièvre", null, null, null, null, null));
+        nextReply = reply("", true);
+        MorningCheck.Outcome o = check(intervals(50.0, 48)).run(false);
+        assertThat(o.readiness().verdict()).isEqualTo(Verdict.YELLOW);
+        assertThat(o.message()).contains("Une maladie est notée dans ton calendrier pour aujourd'hui");
+    }
+
+    @Test
+    void aOneDayMarkerEndsTheSameDayDespiteTheExclusiveEnd() {
+        var e = new io.github.pharaphara.raceradio.icu.model.CalendarEvent(9L, TODAY.minusDays(3).atStartOfDay(),
+                TODAY.minusDays(2).atStartOfDay(), "SICK", null, "Gastro", null, null, null, null, null);
+        assertThat(MorningCheck.health(TODAY, List.of(e))).isEqualTo(
+                new io.github.pharaphara.raceradio.core.readiness.HealthContext(false, 3, "ILLNESS"));
     }
 
     private MorningCheck check(IntervalsClient icu) {

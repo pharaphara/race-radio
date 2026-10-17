@@ -110,7 +110,7 @@ class SessionReviewTest {
                 new ActivityInterval("WORK", null, 900, 1380, 480, null, null, null, null, null),
                 new ActivityInterval("WORK", null, 1560, 2040, 480, null, null, null, null, null),
                 new ActivityInterval("WORK", null, 2220, 3120, 900, null, null, null, null, null));
-        icu.events = List.of(new io.github.pharaphara.raceradio.icu.model.CalendarEvent(1L, ReviewFixtures.START.toLocalDate().atStartOfDay(),
+        icu.events = List.of(new io.github.pharaphara.raceradio.icu.model.CalendarEvent(1L, ReviewFixtures.START.toLocalDate().atStartOfDay(), null,
                 "WORKOUT", "Run", "Threshold", "", "race-radio-y", 3600, 60, tools.jackson.databind.json.JsonMapper.builder().build().readTree("""
                 {"steps":[{"duration":1440,"reps":3,"steps":[{"duration":480,"pace":{"start":275,"end":280,"units":"secs/km"}},
                                                               {"duration":180,"hr":{"value":1,"units":"hr_zone"}}]}]}""")));

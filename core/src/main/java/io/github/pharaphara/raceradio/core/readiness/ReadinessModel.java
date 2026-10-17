@@ -40,10 +40,13 @@ public final class ReadinessModel {
     static final double RESTING_HR_MILD_BPM = 5;
     static final double RESTING_HR_STRONG_BPM = 8;
     static final double RESTING_HR_LOW_NOTE_BPM = -4;
-    static final int SLEEP_STRONG_SECONDS = (int) (4.5 * 3600);
+    /**
+     * Sleep is judged on duration only. The device's sleep score is a proprietary composite of
+     * unknown validity, while duration is measured; the score is still reported, as context.
+     * Same choice as the open Section 11 protocol (v11.21).
+     */
+    static final int SLEEP_STRONG_SECONDS = 5 * 3600;
     static final int SLEEP_MILD_SECONDS = 6 * 3600;
-    static final double SLEEP_SCORE_STRONG = 40;
-    static final double SLEEP_SCORE_MILD = 60;
     static final double FORM_STRONG = -30;
     static final double RECENT_LOAD_FACTOR = 4.5;
 
@@ -76,6 +79,7 @@ public final class ReadinessModel {
             notes.add("A single reading is off (" + signals.getFirst().evidence() + "). On its own it does not change the day.");
         }
         verdict = applyFeel(in.feel(), feel, verdict, strong, signals, notes);
+        verdict = applyHealth(in.health(), verdict, notes);
 
         int score = (int) Math.max(0, Math.min(100, 100 - 12 * mild - 30 * strong));
         return new Readiness(verdict, score, List.copyOf(signals), List.copyOf(notes), List.copyOf(missing), temperament, MODEL);
@@ -108,6 +112,18 @@ public final class ReadinessModel {
         }
         if (reported.good() && verdict == Verdict.RED) {
             notes.add("You report feeling good, but several readings point the same way. An illness can feel fine on its first morning, so the day stays easy.");
+        }
+        return verdict;
+    }
+
+    /** Escalates only: an active marker rules out an unqualified green; a recent one asks. */
+    private static Verdict applyHealth(HealthContext h, Verdict verdict, List<String> notes) {
+        if (h.active()) {
+            notes.add("An " + h.kind().toLowerCase() + " is marked on the calendar for today. A green reading is not clearance: the coach asks how severe it is before anything hard.");
+            return verdict == Verdict.GREEN ? Verdict.YELLOW : verdict;
+        }
+        if (h.recent()) {
+            notes.add("An " + h.kind().toLowerCase() + " marker ended " + h.daysSinceEnd() + " day(s) ago. The marking ending does not mean recovery: the coach asks whether it has passed.");
         }
         return verdict;
     }
@@ -181,11 +197,15 @@ public final class ReadinessModel {
             missing.add("last night's sleep");
             return;
         }
+        if (secs == null) {
+            missing.add("last night's sleep duration");
+            return;
+        }
         String what = describeSleep(secs, score);
-        if ((secs != null && secs < SLEEP_STRONG_SECONDS) || (score != null && score < SLEEP_SCORE_STRONG)) {
-            signals.add(new Signal(SignalKind.SLEEP, Severity.STRONG, "a very poor night: " + what, Signal.Registry.CONVENTION, secs == null ? null : secs / 3600.0, score));
-        } else if ((secs != null && secs < SLEEP_MILD_SECONDS) || (score != null && score < SLEEP_SCORE_MILD)) {
-            signals.add(new Signal(SignalKind.SLEEP, Severity.MILD, "a short or poor night: " + what, Signal.Registry.CONVENTION, secs == null ? null : secs / 3600.0, score));
+        if (secs < SLEEP_STRONG_SECONDS) {
+            signals.add(new Signal(SignalKind.SLEEP, Severity.STRONG, "a very short night: " + what, Signal.Registry.CONVENTION, secs / 3600.0, score));
+        } else if (secs < SLEEP_MILD_SECONDS) {
+            signals.add(new Signal(SignalKind.SLEEP, Severity.MILD, "a short night: " + what, Signal.Registry.CONVENTION, secs / 3600.0, score));
         }
     }
 

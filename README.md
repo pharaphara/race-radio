@@ -57,6 +57,7 @@ The usual abbreviations for these metrics are trademarks. The code and the messa
 4. Charts, rendered once as SVG and served both to Telegram and to a web page.
 5. Goals, sports switched on and off by season, and a planner with a feasibility check.
 6. Recurring segments, harvested from Strava while access lasts, then matched locally by GPS.
+7. A Docker image and a compose file, ready to run anywhere.
 
 ## Credits
 

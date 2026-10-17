@@ -60,6 +60,15 @@ public final class Wording {
         if (english.startsWith("Resting heart rate") && english.contains("unusually low")) {
             return "FC de repos inhabituellement basse. Certains coachs y voient parfois l'annonce d'une maladie ; à elle seule, elle ne signifie rien.";
         }
+        java.util.regex.Matcher health = java.util.regex.Pattern.compile("^An (illness|injury) (is marked|marker ended (\\d+) day)").matcher(english);
+        if (health.find()) {
+            String what = health.group(1).equals("illness") ? "Une maladie" : "Une blessure";
+            if (health.group(3) == null) {
+                return what + " est notée dans ton calendrier pour aujourd'hui. Des chiffres au vert ne valent pas feu vert : dis-moi comment tu te sens avant toute séance dure.";
+            }
+            return what + " notée dans ton calendrier s'est terminée il y a " + health.group(3)
+                    + " jour(s). La fin de la note ne veut pas dire guérison : est-ce passé ?";
+        }
         return "(note non traduite) " + english;
     }
 
@@ -80,6 +89,9 @@ public final class Wording {
         }
         if (english.equals("last night's sleep")) {
             return "le sommeil de la nuit";
+        }
+        if (english.equals("last night's sleep duration")) {
+            return "la durée de sommeil de la nuit";
         }
         return english;
     }

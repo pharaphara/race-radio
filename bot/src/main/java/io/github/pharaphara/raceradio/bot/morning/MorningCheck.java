@@ -7,6 +7,7 @@ import io.github.pharaphara.raceradio.bot.llm.Purpose;
 import io.github.pharaphara.raceradio.bot.store.DecisionLog;
 import io.github.pharaphara.raceradio.bot.store.FeelStore;
 import io.github.pharaphara.raceradio.core.readiness.DayRecord;
+import io.github.pharaphara.raceradio.core.readiness.HealthContext;
 import io.github.pharaphara.raceradio.core.readiness.Readiness;
 import io.github.pharaphara.raceradio.core.readiness.ReadinessInput;
 import io.github.pharaphara.raceradio.core.readiness.ReadinessModel;
@@ -14,6 +15,7 @@ import io.github.pharaphara.raceradio.core.readiness.Temperament;
 import io.github.pharaphara.raceradio.icu.IntervalsClient;
 import io.github.pharaphara.raceradio.icu.IntervalsWriter;
 import io.github.pharaphara.raceradio.icu.model.ActivitySummary;
+import io.github.pharaphara.raceradio.icu.model.CalendarEvent;
 import io.github.pharaphara.raceradio.icu.model.WellnessDay;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -67,7 +69,33 @@ public final class MorningCheck {
         LocalDate today = LocalDate.now(clock);
         List<WellnessDay> wellness = intervals.wellness(today.minusDays(HISTORY_DAYS), today);
         List<ActivitySummary> recent = intervals.activities(today.minusDays(3), today.minusDays(1));
-        return ReadinessModel.assess(input(today, wellness, recent), temperament);
+        HealthContext health = health(today, intervals.events(today.minusDays(HealthContext.RECENT_DAYS + 1), today));
+        ReadinessInput in = input(today, wellness, recent);
+        return ReadinessModel.assess(new ReadinessInput(in.history(), in.fitness(), in.fatigue(), in.loadLast3Days(),
+                in.feel(), in.recentFeels(), health), temperament);
+    }
+
+    /** Illness or injury markers from the calendar: one spanning today, else the latest that ended. */
+    static HealthContext health(LocalDate today, List<CalendarEvent> events) {
+        HealthContext best = HealthContext.NONE;
+        for (CalendarEvent e : events) {
+            if (!e.isHealthMarker() || e.start() == null) {
+                continue;
+            }
+            String kind = "SICK".equals(e.category()) ? "ILLNESS" : "INJURY";
+            LocalDate first = e.start().toLocalDate();
+            LocalDate last = e.lastDay();
+            if (!first.isAfter(today) && !last.isBefore(today)) {
+                return new HealthContext(true, null, kind);
+            }
+            if (last.isBefore(today)) {
+                int since = (int) java.time.temporal.ChronoUnit.DAYS.between(last, today);
+                if (best.daysSinceEnd() == null || since < best.daysSinceEnd()) {
+                    best = new HealthContext(false, since, kind);
+                }
+            }
+        }
+        return best;
     }
 
     ReadinessInput input(LocalDate today, List<WellnessDay> wellness, List<ActivitySummary> recent) {
