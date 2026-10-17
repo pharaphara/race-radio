@@ -37,19 +37,26 @@ public final class Charts {
      *                   glitch do not flatten everything else; values outside are clamped to the edge
      */
     public record Panel(String title, List<Series> series, DoubleFunction<String> yFormat, boolean zeroLine,
-                        boolean inverted, double tickStep, boolean endLabels, boolean robust) {
+                        boolean inverted, double tickStep, boolean endLabels, boolean robust, List<Reference> references) {
 
         public static Panel of(String title, List<Series> series, DoubleFunction<String> yFormat) {
-            return new Panel(title, series, yFormat, false, false, Double.NaN, true, false);
+            return new Panel(title, series, yFormat, false, false, Double.NaN, true, false, List.of());
         }
 
         public Panel withZeroLine() {
-            return new Panel(title, series, yFormat, true, inverted, tickStep, endLabels, robust);
+            return new Panel(title, series, yFormat, true, inverted, tickStep, endLabels, robust, references);
         }
 
         /** For a session: robust range, no end label. */
         public Panel forSession() {
-            return new Panel(title, series, yFormat, zeroLine, inverted, tickStep, false, true);
+            return new Panel(title, series, yFormat, zeroLine, inverted, tickStep, false, true, references);
+        }
+
+        /** A dashed level across the panel, always kept in range. */
+        public Panel withReference(double value, String label) {
+            List<Reference> more = new java.util.ArrayList<>(references);
+            more.add(new Reference(value, label));
+            return new Panel(title, series, yFormat, zeroLine, inverted, tickStep, endLabels, robust, List.copyOf(more));
         }
 
         /**
@@ -57,16 +64,34 @@ public final class Charts {
          * them to the edge would draw a flat line the athlete never had.
          */
         public Panel fullRange() {
-            return new Panel(title, series, yFormat, zeroLine, inverted, tickStep, endLabels, false);
+            return new Panel(title, series, yFormat, zeroLine, inverted, tickStep, endLabels, false, references);
         }
 
         public Panel inverted(double step) {
-            return new Panel(title, series, yFormat, zeroLine, true, step, endLabels, robust);
+            return new Panel(title, series, yFormat, zeroLine, true, step, endLabels, robust, references);
         }
     }
 
-    /** A stretch of the x axis to wash, such as a work interval. */
-    public record Band(double from, double to) {
+    /** A level drawn dashed across a panel, such as a threshold. */
+    public record Reference(double value, String label) {
+    }
+
+    /**
+     * A stretch of the x axis to wash, such as a work interval.
+     *
+     * @param label  written over the band in the first panel, or null; on one line when it fits,
+     *               else its two halves on two lines, and left out when it would overlap the previous one
+     */
+    public record Band(double from, double to, String label) {
+
+        public Band(double from, double to) {
+            this(from, to, null);
+        }
+    }
+
+    /** Rough width of a label at 11 px, enough to keep labels apart. */
+    static double textWidth(String s) {
+        return 6.4 * s.length();
     }
 
     private Charts() {
@@ -141,6 +166,14 @@ public final class Charts {
                     svg.text(px[last] + 8, py[last] + 4, panel.yFormat().apply(pts[1][last]), 11, t.textSecondary(), "start", false);
                 }
             }
+            for (Reference r : panel.references()) {
+                double yy = sy.at(r.value());
+                svg.dashed(LEFT, yy, WIDTH - RIGHT, yy, t.textSecondary(), 1.2);
+                svg.haloText(WIDTH - RIGHT, yy - 5, r.label(), 11, t.textSecondary(), "end", false);
+            }
+            if (p == 0) {
+                bandLabels(svg, bands, sx, top + 14, t);
+            }
             top = bottom + PANEL_GAP;
         }
         double axisY = top - PANEL_GAP + 4;
@@ -153,6 +186,31 @@ public final class Charts {
             svg.text(sx.at(tick), axisY + 14, xFormat.apply(tick), 11, t.textMuted(), "middle", false);
         }
         return svg.toString();
+    }
+
+    private static void bandLabels(Svg svg, List<Band> bands, Scale sx, double top, Theme t) {
+        double freeFrom = LEFT;
+        for (Band band : bands) {
+            if (band.label() == null || band.label().isBlank()) {
+                continue;
+            }
+            double centre = (sx.at(band.from()) + sx.at(band.to())) / 2;
+            String[] lines = {band.label()};
+            double w = textWidth(band.label());
+            int at = band.label().indexOf(" @ ");
+            if (w > sx.at(band.to()) - sx.at(band.from()) + 16 && at > 0) {
+                lines = new String[] {band.label().substring(0, at), band.label().substring(at + 3)};
+                w = Math.max(textWidth(lines[0]), textWidth(lines[1]));
+            }
+            double left = Math.max(LEFT, Math.min(centre - w / 2, WIDTH - RIGHT - w));
+            if (left < freeFrom) {
+                continue;
+            }
+            for (int i = 0; i < lines.length; i++) {
+                svg.haloText(left + w / 2, top + 12 + 13 * i, lines[i], 11, t.textPrimary(), "middle", true);
+            }
+            freeFrom = left + w + 8;
+        }
     }
 
     /** Horizontal bars, one colour: each label names its bar, the value sits at the tip. */
@@ -199,6 +257,10 @@ public final class Charts {
         if (panel.zeroLine()) {
             lo = Math.min(lo, 0);
             hi = Math.max(hi, 0);
+        }
+        for (Reference r : panel.references()) {
+            lo = Math.min(lo, r.value());
+            hi = Math.max(hi, r.value());
         }
         return new double[] {lo, hi};
     }
