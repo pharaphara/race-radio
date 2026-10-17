@@ -29,9 +29,11 @@ public class RunOnce implements ApplicationRunner {
     private final SessionReview review;
     private final IntervalsClient intervals;
     private final ConfigurableApplicationContext context;
+    private final java.nio.file.Path charts;
 
     public RunOnce(@Value("${race-radio.once:}") String once, MorningCheck morning, SessionReview review,
-                   IntervalsClient intervals, ConfigurableApplicationContext context) {
+                   IntervalsClient intervals, ConfigurableApplicationContext context, RaceRadioProperties props) {
+        this.charts = props.dataDir().resolve("charts");
         this.once = once;
         this.morning = morning;
         this.review = review;
@@ -54,10 +56,27 @@ public class RunOnce implements ApplicationRunner {
                     .orElseThrow(() -> new IllegalArgumentException("no activity " + id + " in the last year"));
             SessionReview.Outcome o = review.review(a, false);
             print(o.message(), o.worded(), "structure " + o.facts().structureSource() + ", " + o.facts().repetitions());
+            save(id, o.images());
+        } else if (once.equals("fitness")) {
+            byte[] chart = morning.fitnessChart();
+            save("fitness", chart == null ? java.util.List.of() : java.util.List.of(chart));
         } else {
-            throw new IllegalArgumentException("race-radio.once must be morning or review:<activity id>");
+            throw new IllegalArgumentException("race-radio.once must be morning, fitness or review:<activity id>");
         }
         System.exit(SpringApplication.exit(context, () -> 0));
+    }
+
+    private void save(String name, java.util.List<byte[]> images) {
+        try {
+            java.nio.file.Files.createDirectories(charts);
+            for (int i = 0; i < images.size(); i++) {
+                java.nio.file.Path p = charts.resolve(name + "-" + (i + 1) + ".png");
+                java.nio.file.Files.write(p, images.get(i));
+                System.out.println("image : " + p);
+            }
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
     }
 
     private static void print(String message, boolean worded, String detail) {

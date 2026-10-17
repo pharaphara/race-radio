@@ -98,6 +98,38 @@ public final class MorningCheck {
         return best;
     }
 
+    /** Fitness and fatigue over six weeks, with form in its own panel since it crosses zero. */
+    public byte[] fitnessChart() {
+        LocalDate today = LocalDate.now(clock);
+        List<WellnessDay> days = intervals.wellness(today.minusDays(41), today).stream()
+                .filter(w -> w.fitness() != null && w.fatigue() != null)
+                .sorted(Comparator.comparing(WellnessDay::date)).toList();
+        if (days.size() < 2) {
+            return null;
+        }
+        int n = days.size();
+        double[] x = new double[n];
+        double[] fit = new double[n];
+        double[] fat = new double[n];
+        double[] form = new double[n];
+        for (int i = 0; i < n; i++) {
+            x[i] = java.time.temporal.ChronoUnit.DAYS.between(today, days.get(i).date());
+            fit[i] = days.get(i).fitness();
+            fat[i] = days.get(i).fatigue();
+            form[i] = fit[i] - fat[i];
+        }
+        java.util.function.DoubleFunction<String> round = y -> String.valueOf(Math.round(y));
+        String svg = io.github.pharaphara.raceradio.charts.Charts.panels("Forme de fond et fatigue", "six dernières semaines",
+                x, d -> d == 0 ? "aujourd'hui" : "J" + Math.round(d), 7, List.of(
+                        io.github.pharaphara.raceradio.charts.Charts.Panel.of("Charge lissée", List.of(
+                                new io.github.pharaphara.raceradio.charts.Charts.Series("forme de fond", fit, 0),
+                                new io.github.pharaphara.raceradio.charts.Charts.Series("fatigue", fat, 1)), round),
+                        io.github.pharaphara.raceradio.charts.Charts.Panel.of("Fraîcheur", List.of(
+                                new io.github.pharaphara.raceradio.charts.Charts.Series("fraîcheur", form, 2)), round).withZeroLine()),
+                List.of(), io.github.pharaphara.raceradio.charts.Theme.DARK);
+        return io.github.pharaphara.raceradio.charts.Png.of(svg, io.github.pharaphara.raceradio.charts.Charts.WIDTH, 2);
+    }
+
     ReadinessInput input(LocalDate today, List<WellnessDay> wellness, List<ActivitySummary> recent) {
         List<DayRecord> history = new ArrayList<>(wellness.stream()
                 .filter(w -> w.date() != null && !w.date().isAfter(today))

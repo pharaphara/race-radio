@@ -111,6 +111,9 @@ public class BotConfiguration {
         return new ActivityWatcher(intervals, reviewed, review, (activity, outcome) -> {
             if (props.telegram().allowedChatId() != 0) {
                 telegram.send(props.telegram().allowedChatId(), outcome.message());
+                for (byte[] image : outcome.images()) {
+                    telegram.sendPhoto(props.telegram().allowedChatId(), image, null);
+                }
             }
         }, props.schedule().watchFrom(), props.schedule().watchUntil(), clock);
     }

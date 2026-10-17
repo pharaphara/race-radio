@@ -47,7 +47,12 @@ public final class SessionReview {
     /** Below this, a steady session is too short for decoupling to mean anything. */
     static final int DECOUPLING_MIN_SECONDS = 20 * 60;
 
-    public record Outcome(SessionFacts facts, String message, boolean worded) {
+    /** @param images PNG charts to send after the message; empty when there is nothing to draw */
+    public record Outcome(SessionFacts facts, String message, boolean worded, List<byte[]> images) {
+    }
+
+    /** The facts with the streams they came from, so the charts draw exactly what was analysed. */
+    record Computed(SessionFacts facts, Samples effort, Samples heartRate) {
     }
 
     private final IntervalsClient intervals;
@@ -68,7 +73,8 @@ public final class SessionReview {
     }
 
     public Outcome review(ActivitySummary a, boolean publish) {
-        SessionFacts facts = facts(a);
+        Computed computed = compute(a);
+        SessionFacts facts = computed.facts();
         String fallback = ReviewWording.deterministic(facts);
         String message = fallback;
         boolean worded = false;
@@ -97,18 +103,28 @@ public final class SessionReview {
             decisions.record(clock.instant(), "REVIEW", a.start() == null ? LocalDate.now(clock) : a.start().toLocalDate(),
                     null, facts.structureModel() == null ? "no-data" : facts.structureModel(), JSON.writeValueAsString(facts), message, model.promptVersion());
         }
-        return new Outcome(facts, message, worded);
+        List<byte[]> images = List.of();
+        try {
+            images = SessionCharts.render(facts, computed.effort(), computed.heartRate());
+        } catch (RuntimeException e) {
+            LOG.warn("charts of {} could not be drawn: {}", a.id(), e.getMessage());
+        }
+        return new Outcome(facts, message, worded, images);
     }
 
     SessionFacts facts(ActivitySummary a) {
+        return compute(a).facts();
+    }
+
+    Computed compute(ActivitySummary a) {
         Optional<SportSettings> settings = intervals.athlete().settingsFor(a.type());
         ActivityStreams streams = intervals.streams(a.id());
         Optional<EffortSignal> signal = EffortSignal.of(a.type(), streams, settings);
         Double hrMean = streams.get("heartrate").map(Samples::mean).filter(v -> !v.isNaN()).orElse(null);
         if (signal.isEmpty()) {
-            return new SessionFacts(a.id(), a.type(), a.start(), a.movingSeconds(), a.distanceMetres(), a.elevationGainMetres(),
+            return new Computed(new SessionFacts(a.id(), a.type(), a.start(), a.movingSeconds(), a.distanceMetres(), a.elevationGainMetres(),
                     a.load(), hrMean, false, null, null, null, null, List.of(), List.of(), false, List.of(),
-                    null, null, Map.of(), null, null);
+                    null, null, Map.of(), null, null), null, null);
         }
         EffortSignal s = signal.get();
         List<PlannedStep> plan = plannedWork(a, s, settings);
@@ -118,7 +134,7 @@ public final class SessionReview {
         List<SessionFacts.BlockFact> work = structure.work().stream().map(b -> new SessionFacts.BlockFact(
                 b.start(), b.seconds(), Formats.duration(b.seconds()), Formats.effort(b.mean(), s.unit(), a.type()))).toList();
         List<String> reps = structure.repetitions().stream()
-                .map(g -> g.size() + " × " + Formats.duration(g.getFirst().seconds())).toList();
+                .map(g -> g.size() + " × " + Formats.repDuration(g.getFirst().seconds())).toList();
         List<SessionFacts.ComparisonFact> comparison = structure.againstPlan().stream().map(c -> comparison(c, s, a.type())).toList();
 
         SessionFacts.PowerFacts power = null;
@@ -154,9 +170,9 @@ public final class SessionReview {
             double v = StrokeEfficiency.distancePerStroke(s.values(), streams.get("cadence").get());
             dps = Double.isNaN(v) ? null : round2(v);
         }
-        return new SessionFacts(a.id(), a.type(), a.start(), a.movingSeconds(), a.distanceMetres(), a.elevationGainMetres(),
+        return new Computed(new SessionFacts(a.id(), a.type(), a.start(), a.movingSeconds(), a.distanceMetres(), a.elevationGainMetres(),
                 a.load(), hrMean == null ? null : round1(hrMean), true, s.column(), s.unit(), structure.source().name(), structure.model(),
-                work, reps, !plan.isEmpty(), comparison, power, zoneModel, zones, decoupling, dps);
+                work, reps, !plan.isEmpty(), comparison, power, zoneModel, zones, decoupling, dps), s.values(), hr.orElse(null));
     }
 
     private List<PlannedStep> plannedWork(ActivitySummary a, EffortSignal s, Optional<SportSettings> settings) {

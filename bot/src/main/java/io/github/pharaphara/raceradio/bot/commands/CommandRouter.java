@@ -90,6 +90,16 @@ public final class CommandRouter {
             default -> "Je ne comprends que les commandes pour l'instant. La conversation libre arrive.\n\n" + HELP;
         };
         telegram.send(chatId, answer);
+        if (command.equals("/forme")) {
+            try {
+                byte[] chart = morning.fitnessChart();
+                if (chart != null) {
+                    telegram.sendPhoto(chatId, chart, null);
+                }
+            } catch (RuntimeException e) {
+                telegram.send(chatId, "Le graphique n'a pas pu être dessiné.");
+            }
+        }
     }
 
     String form() {

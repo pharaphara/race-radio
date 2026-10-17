@@ -16,6 +16,14 @@ final class Formats {
         return s == 0 ? m + " min" : m + " min " + String.format("%02d", s) + " s";
     }
 
+    /**
+     * A repetition's length as a coach would say it: whole minutes from two minutes up, since a
+     * device lap of 10 min 03 s is a ten-minute rep. Exact durations stay in the facts.
+     */
+    static String repDuration(int seconds) {
+        return seconds >= 120 ? Math.round(seconds / 60.0) + " min" : duration(seconds);
+    }
+
     /** Mean effort in the reader's unit: watts, pace per kilometre, or pace per 100 m. */
     static String effort(double value, String unit, String sport) {
         if (Double.isNaN(value)) {

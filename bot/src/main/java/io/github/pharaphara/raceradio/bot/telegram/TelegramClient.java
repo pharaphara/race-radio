@@ -87,6 +87,35 @@ public class TelegramClient {
         call("sendMessage", body, Duration.ofSeconds(20));
     }
 
+    /** Sends a PNG image, with a short caption. */
+    public void sendPhoto(long chatId, byte[] png, String caption) {
+        String boundary = "race-radio-" + java.util.UUID.randomUUID();
+        java.io.ByteArrayOutputStream body = new java.io.ByteArrayOutputStream();
+        try {
+            field(body, boundary, "chat_id", String.valueOf(chatId));
+            if (caption != null && !caption.isBlank()) {
+                field(body, boundary, "caption", caption.length() > 1024 ? caption.substring(0, 1024) : caption);
+            }
+            body.write(("--" + boundary + "\r\nContent-Disposition: form-data; name=\"photo\"; filename=\"chart.png\"\r\n"
+                    + "Content-Type: image/png\r\n\r\n").getBytes(StandardCharsets.UTF_8));
+            body.write(png);
+            body.write(("\r\n--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8));
+        } catch (IOException e) {
+            throw new IllegalStateException(e);
+        }
+        HttpRequest req = HttpRequest.newBuilder(URI.create(base + "sendPhoto"))
+                .timeout(Duration.ofSeconds(60))
+                .header("Content-Type", "multipart/form-data; boundary=" + boundary)
+                .POST(HttpRequest.BodyPublishers.ofByteArray(body.toByteArray()))
+                .build();
+        check("sendPhoto", req);
+    }
+
+    private static void field(java.io.ByteArrayOutputStream out, String boundary, String name, String value) throws IOException {
+        out.write(("--" + boundary + "\r\nContent-Disposition: form-data; name=\"" + name + "\"\r\n\r\n" + value + "\r\n")
+                .getBytes(StandardCharsets.UTF_8));
+    }
+
     public void acknowledge(String callbackId, String note) {
         call("answerCallbackQuery", Map.of("callback_query_id", callbackId, "text", note), Duration.ofSeconds(10));
     }
@@ -122,6 +151,10 @@ public class TelegramClient {
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(JSON.writeValueAsString(body), StandardCharsets.UTF_8))
                 .build();
+        return check(method, req);
+    }
+
+    private JsonNode check(String method, HttpRequest req) {
         HttpResponse<String> res;
         try {
             res = http.send(req, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
