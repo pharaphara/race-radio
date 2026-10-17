@@ -30,7 +30,7 @@ public record SessionFacts(
     }
 
     public record PowerFacts(long weightedAveragePower, long averagePower, double intensity, long load,
-                             double variability, String wPrimeModel, int wPrimeDeepestDepletionPercent,
+                             double variability, String wPrimeModel, int wPrimeLowestBalancePercent,
                              boolean wPrimeExceeded) {
     }
 }

@@ -17,7 +17,7 @@ import java.util.List;
  *   <li>If the two populations are too close, the session was steady: report nothing rather than
  *       invent structure.</li>
  *   <li>Walk the smoothed signal with hysteresis around that threshold, so that a dip on a descent
- *       does not cut a block in two, then join blocks separated by less than half the window.</li>
+ *       does not cut a block in two, then join blocks separated by less than the join gap.</li>
  *   <li>Refine each boundary on a lightly smoothed signal, at the midpoint between that block's
  *       own level and the easy population.</li>
  *   <li>Drop blocks shorter than the minimum, and blocks below the endurance plateau: work means
@@ -77,7 +77,7 @@ public final class IntervalDetector {
 
         List<int[]> joined = new ArrayList<>();
         for (int[] b : raw) {
-            if (!joined.isEmpty() && b[0] - joined.getLast()[1] < settings.smoothingSeconds() / 2) {
+            if (!joined.isEmpty() && b[0] - joined.getLast()[1] < settings.joinSeconds()) {
                 joined.getLast()[1] = b[1];
             } else {
                 joined.add(b);

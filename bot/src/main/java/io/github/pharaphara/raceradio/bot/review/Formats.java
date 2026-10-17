@@ -13,6 +13,9 @@ final class Formats {
         if (h > 0) {
             return h + "h" + String.format("%02d", m);
         }
+        if (m == 0) {
+            return s + " s";
+        }
         return s == 0 ? m + " min" : m + " min " + String.format("%02d", s) + " s";
     }
 

@@ -52,6 +52,14 @@ public final class Charts {
             return new Panel(title, series, yFormat, zeroLine, inverted, tickStep, false, true);
         }
 
+        /**
+         * Every reading in range. For a heart rate, whose lows are real (a stop, a descent), clamping
+         * them to the edge would draw a flat line the athlete never had.
+         */
+        public Panel fullRange() {
+            return new Panel(title, series, yFormat, zeroLine, inverted, tickStep, endLabels, false);
+        }
+
         public Panel inverted(double step) {
             return new Panel(title, series, yFormat, zeroLine, true, step, endLabels, robust);
         }
