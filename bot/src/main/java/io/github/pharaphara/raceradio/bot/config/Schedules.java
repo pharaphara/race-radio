@@ -2,6 +2,7 @@ package io.github.pharaphara.raceradio.bot.config;
 
 import io.github.pharaphara.raceradio.bot.llm.Journal;
 import io.github.pharaphara.raceradio.bot.morning.MorningCheck;
+import io.github.pharaphara.raceradio.bot.review.ActivityWatcher;
 import io.github.pharaphara.raceradio.bot.telegram.TelegramClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,18 +25,30 @@ public class Schedules implements SchedulingConfigurer {
     private final MorningCheck morning;
     private final TelegramClient telegram;
     private final Journal journal;
+    private final ActivityWatcher watcher;
 
-    public Schedules(RaceRadioProperties props, MorningCheck morning, TelegramClient telegram, Journal journal) {
+    private final String once;
+
+    public Schedules(RaceRadioProperties props, MorningCheck morning, TelegramClient telegram, Journal journal, ActivityWatcher watcher,
+                     @org.springframework.beans.factory.annotation.Value("${race-radio.once:}") String once) {
+        this.once = once;
         this.props = props;
         this.morning = morning;
         this.telegram = telegram;
         this.journal = journal;
+        this.watcher = watcher;
     }
 
     @Override
     public void configureTasks(ScheduledTaskRegistrar registrar) {
+        if (!once.isBlank()) {
+            // A one-off run does its single job and nothing else: no schedule, no watcher.
+            return;
+        }
         registrar.addCronTask(new CronTask(this::morningCall, daily(props.schedule().morningAt())));
         registrar.addCronTask(new CronTask(this::purgeJournal, daily(LocalTime.of(3, 30))));
+        // The watcher checks its own daytime window; outside it a poll costs nothing.
+        registrar.addFixedDelayTask(this::watch, java.time.Duration.ofMinutes(props.schedule().watchEveryMinutes()));
     }
 
     void morningCall() {
@@ -50,6 +63,17 @@ public class Schedules implements SchedulingConfigurer {
                 telegram.send(props.telegram().allowedChatId(),
                         "Je n'ai pas pu faire le point ce matin : " + e.getMessage() + "\nRéessaie avec /aujourdhui.");
             }
+        }
+    }
+
+    void watch() {
+        try {
+            int n = watcher.poll();
+            if (n > 0) {
+                LOG.info("{} session(s) reviewed", n);
+            }
+        } catch (RuntimeException e) {
+            LOG.warn("looking for new activities failed: {}", e.getMessage());
         }
     }
 

@@ -9,9 +9,12 @@ import io.github.pharaphara.raceradio.bot.llm.ModelTransport;
 import io.github.pharaphara.raceradio.bot.llm.Pricing;
 import io.github.pharaphara.raceradio.bot.llm.SystemPrompt;
 import io.github.pharaphara.raceradio.bot.morning.MorningCheck;
+import io.github.pharaphara.raceradio.bot.review.ActivityWatcher;
+import io.github.pharaphara.raceradio.bot.review.SessionReview;
 import io.github.pharaphara.raceradio.bot.store.DecisionLog;
 import io.github.pharaphara.raceradio.bot.store.FeelStore;
 import io.github.pharaphara.raceradio.bot.store.Ledger;
+import io.github.pharaphara.raceradio.bot.store.ReviewedActivities;
 import io.github.pharaphara.raceradio.bot.telegram.TelegramClient;
 import io.github.pharaphara.raceradio.bot.telegram.TelegramPoller;
 import io.github.pharaphara.raceradio.icu.IntervalsClient;
@@ -93,6 +96,21 @@ public class BotConfiguration {
     MorningCheck morningCheck(IntervalsClient intervals, IntervalsWriter writer, CoachModel model,
                               FeelStore feels, DecisionLog decisions, Clock clock) {
         return new MorningCheck(intervals, writer, model, feels, decisions, props.temperament(), props.model().morningEffort(), clock);
+    }
+
+    @Bean
+    SessionReview sessionReview(IntervalsClient intervals, IntervalsWriter writer, CoachModel model, DecisionLog decisions, Clock clock) {
+        return new SessionReview(intervals, writer, model, decisions, props.model().reviewEffort(), clock);
+    }
+
+    @Bean
+    ActivityWatcher activityWatcher(IntervalsClient intervals, ReviewedActivities reviewed, SessionReview review,
+                                    TelegramClient telegram, Clock clock) {
+        return new ActivityWatcher(intervals, reviewed, review, (activity, outcome) -> {
+            if (props.telegram().allowedChatId() != 0) {
+                telegram.send(props.telegram().allowedChatId(), outcome.message());
+            }
+        }, props.schedule().watchFrom(), props.schedule().watchUntil(), clock);
     }
 
     @Bean
