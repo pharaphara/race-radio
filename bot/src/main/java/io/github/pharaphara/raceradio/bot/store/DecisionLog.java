@@ -35,6 +35,12 @@ public class DecisionLog {
                         rs.getString(5), rs.getString(6), rs.getString(7), rs.getString(8))).stream().findFirst();
     }
 
+    public Optional<Decision> latestOf(String kind) {
+        return jdbc.query("SELECT at, kind, day, verdict, model, evidence_json, message, prompt_version FROM decision WHERE kind = ? ORDER BY id DESC LIMIT 1",
+                (rs, i) -> new Decision(rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4),
+                        rs.getString(5), rs.getString(6), rs.getString(7), rs.getString(8)), kind).stream().findFirst();
+    }
+
     public boolean exists(String kind, LocalDate day) {
         Integer n = jdbc.queryForObject("SELECT COUNT(*) FROM decision WHERE kind = ? AND day = ?", Integer.class, kind, day.toString());
         return n != null && n > 0;

@@ -34,9 +34,12 @@ public final class CommandRouter {
             /aujourdhui · le message du matin, rédigé
             /pourquoi · le détail de la dernière décision
             /ressenti 4 3 4 4 5 · sommeil, énergie, courbatures, humeur, appétit, de 1 (mauvais) à 5 (bon)
+            /note j'ai mal au mollet gauche · un fait que le coach doit garder en tête
+            /notes · les faits gardés · /oubli 3 · en retirer un
             /cout · les appels au modèle ce mois-ci
             /dernierenvoi · ce qui a été envoyé au modèle la dernière fois
-            /aide · cette liste""";
+            /aide · cette liste
+            Et sinon, écris-moi simplement : je réponds avec tes données du jour.""";
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
     private static final Pattern DATA_SOURCE = Pattern.compile("<data source=\"([^\"]+)\"");
@@ -52,9 +55,15 @@ public final class CommandRouter {
     private final Clock clock;
     private final ZoneId zone;
     private final boolean dryRun;
+    private final io.github.pharaphara.raceradio.bot.chat.Conversation conversation;
+    private final io.github.pharaphara.raceradio.bot.store.Conversations memory;
 
     public CommandRouter(TelegramClient telegram, long chatId, MorningCheck morning, FeelStore feels, DecisionLog decisions,
-                         Ledger ledger, Journal journal, CoachModel model, Clock clock, ZoneId zone, boolean dryRun) {
+                         Ledger ledger, Journal journal, CoachModel model, Clock clock, ZoneId zone, boolean dryRun,
+                         io.github.pharaphara.raceradio.bot.chat.Conversation conversation,
+                         io.github.pharaphara.raceradio.bot.store.Conversations memory) {
+        this.conversation = conversation;
+        this.memory = memory;
         this.telegram = telegram;
         this.chatId = chatId;
         this.morning = morning;
@@ -87,7 +96,10 @@ public final class CommandRouter {
             case "/ressenti" -> feel(text);
             case "/cout" -> cost();
             case "/dernierenvoi" -> lastSent();
-            default -> "Je ne comprends que les commandes pour l'instant. La conversation libre arrive.\n\n" + HELP;
+            case "/note" -> note(text);
+            case "/notes" -> notes();
+            case "/oubli" -> forget(text);
+            default -> command.startsWith("/") ? "Commande inconnue.\n\n" + HELP : conversation.answer(text);
         };
         telegram.send(chatId, answer);
         if (command.equals("/forme")) {
@@ -105,6 +117,35 @@ public final class CommandRouter {
     String form() {
         Readiness r = morning.assess();
         return Wording.deterministic(r) + "\n\nScore " + r.score() + "/100 · tempérament " + r.temperament().name().toLowerCase(Locale.ROOT);
+    }
+
+    String note(String text) {
+        String fact = text.replaceFirst("(?i)^/note(@\\S+)?\\s*", "").strip();
+        if (fact.isEmpty()) {
+            return "Écris le fait après /note, par exemple : /note genou droit sensible en descente";
+        }
+        long id = memory.addNote(clock.instant(), fact);
+        return "Noté (n° " + id + ") : je le garde en tête jusqu'à ce que tu le retires avec /oubli " + id + ".";
+    }
+
+    String notes() {
+        var all = memory.activeNotes();
+        if (all.isEmpty()) {
+            return "Aucun fait gardé. Ajoute-en avec /note.";
+        }
+        StringBuilder b = new StringBuilder("Ce que je garde en tête :");
+        for (var n : all) {
+            b.append("\n").append(n.id()).append(". ").append(n.text()).append(" (").append(n.at(), 0, 10).append(')');
+        }
+        return b.toString();
+    }
+
+    String forget(String text) {
+        Matcher m = Pattern.compile("(\\d+)").matcher(text);
+        if (!m.find()) {
+            return "Donne le numéro du fait à retirer, par exemple : /oubli 3 (voir /notes).";
+        }
+        return memory.withdraw(Long.parseLong(m.group(1))) ? "Retiré." : "Je ne trouve pas ce numéro parmi les faits gardés.";
     }
 
     String why() {

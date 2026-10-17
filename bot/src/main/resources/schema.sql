@@ -49,3 +49,19 @@ CREATE TABLE IF NOT EXISTS reviewed_activity (
     activity_id  TEXT PRIMARY KEY,
     at           TEXT NOT NULL
 );
+
+-- The conversation, turn by turn: the dated journal of what was said.
+CREATE TABLE IF NOT EXISTS conversation (
+    id    INTEGER PRIMARY KEY AUTOINCREMENT,
+    at    TEXT NOT NULL,
+    role  TEXT NOT NULL,
+    text  TEXT NOT NULL
+);
+
+-- Notes the athlete asked the coach to keep: current facts such as an injury or a constraint.
+CREATE TABLE IF NOT EXISTS note (
+    id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    at      TEXT NOT NULL,
+    text    TEXT NOT NULL,
+    active  INTEGER NOT NULL DEFAULT 1
+);

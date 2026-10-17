@@ -124,10 +124,18 @@ public class BotConfiguration {
     }
 
     @Bean
+    io.github.pharaphara.raceradio.bot.chat.Conversation conversation(CoachModel model, MorningCheck morning, DecisionLog decisions,
+                                                                     io.github.pharaphara.raceradio.bot.store.Conversations memory, Clock clock) {
+        return new io.github.pharaphara.raceradio.bot.chat.Conversation(model, morning, decisions, memory, clock);
+    }
+
+    @Bean
     CommandRouter commandRouter(TelegramClient telegram, MorningCheck morning, FeelStore feels, DecisionLog decisions,
-                                Ledger ledger, Journal journal, CoachModel model, Clock clock) {
+                                Ledger ledger, Journal journal, CoachModel model, Clock clock,
+                                io.github.pharaphara.raceradio.bot.chat.Conversation conversation,
+                                io.github.pharaphara.raceradio.bot.store.Conversations memory) {
         return new CommandRouter(telegram, props.telegram().allowedChatId(), morning, feels, decisions, ledger, journal,
-                model, clock, props.zone(), props.dryRun());
+                model, clock, props.zone(), props.dryRun(), conversation, memory);
     }
 
     /** Starts listening to Telegram on its own thread, only when a token and a chat are configured. */
