@@ -1,0 +1,32 @@
+race-radio
+Copyright (c) 2026 pharaphara. MIT licensed, see LICENSE.
+
+This project stands on published sports science and on the work of other open-source coaches.
+Nothing below is copied code; where content or structure was adapted, the source is MIT licensed
+and named here, as its licence asks.
+
+Adapted content
+---------------
+- claude-coach, by Felix Rieseberg (MIT), https://github.com/felixrieseberg/claude-coach
+  The critical swim speed test protocol and its worked example, the swimming zones expressed as
+  offsets from critical swim speed, the field-test protocols for running and cycling, and the way
+  the knowledge base is split by topic with a "when to read" table.
+
+- Enduragent, formerly cycling-coach, by yerzhansa (MIT), https://github.com/yerzhansa/cycling-coach
+  The review structure (did it go well, one thing to fix, what it means next), the filter rule
+  (a metric appears only if it answers one of those questions), the evidence-limit rule, the rule
+  that every recommendation names its basis, and the choice of plain names over trademarked
+  abbreviations.
+
+Read, not copied
+----------------
+- GoldenCheetah (GPL v2), https://github.com/GoldenCheetah/GoldenCheetah
+  Consulted as living documentation of the models (critical power, W′ balance, impulse-response
+  load). No GoldenCheetah code is included; the formulas are implemented from the literature.
+
+Science
+-------
+The models are named where they are implemented: the weighted average power and load framework,
+Skiba's W′ balance in its differential form, the Banister impulse-response model as Intervals.icu
+implements it, Friel's seven-zone system, Daniels' threshold-relative paces, and critical swim speed.
+Full references live in the knowledge base.

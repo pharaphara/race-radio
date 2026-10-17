@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>io.github.pharaphara.raceradio</groupId>
+  <artifactId>race-radio-parent</artifactId>
+  <version>0.1.0-SNAPSHOT</version>
+  <packaging>pom</packaging>
+
+  <name>race-radio</name>
+  <description>A self-hosted triathlon coach that talks to you on Telegram, reads Intervals.icu and shows its work.</description>
+  <url>https://github.com/pharaphara/race-radio</url>
+
+  <licenses>
+    <license>
+      <name>MIT</name>
+      <url>https://opensource.org/licenses/MIT</url>
+    </license>
+  </licenses>
+
+  <!--
+    Modules, each with one job.
+
+      core   pure domain: zones, load, readiness, interval detection, segments, goals.
+             No Spring, no HTTP, no LLM. Every number the coach states is computed here.
+      icu    Intervals.icu client: reads, writes, dry-run, workout syntax validation.
+
+    The boundary is the point. Because core cannot see the network or the model, no calculation
+    can quietly depend on either: the language model only ever interprets numbers it is handed.
+  -->
+  <modules>
+    <module>core</module>
+    <module>icu</module>
+  </modules>
+
+  <properties>
+    <maven.compiler.release>21</maven.compiler.release>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+
+    <spring-boot.version>4.1.1</spring-boot.version>
+
+    <maven-compiler-plugin.version>3.16.0</maven-compiler-plugin.version>
+    <maven-surefire-plugin.version>3.6.0</maven-surefire-plugin.version>
+    <maven-resources-plugin.version>3.5.0</maven-resources-plugin.version>
+  </properties>
+
+  <dependencyManagement>
+    <dependencies>
+      <!--
+        The Spring Boot BOM aligns Jackson, JUnit and AssertJ across modules.
+        Importing it does not make core depend on Spring: a BOM only manages versions.
+      -->
+      <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-dependencies</artifactId>
+        <version>${spring-boot.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>io.github.pharaphara.raceradio</groupId>
+        <artifactId>race-radio-core</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
+  <build>
+    <pluginManagement>
+      <plugins>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-compiler-plugin</artifactId>
+          <version>${maven-compiler-plugin.version}</version>
+          <configuration>
+            <!-- Keep parameter names in the bytecode; Spring binding relies on them. -->
+            <parameters>true</parameters>
+          </configuration>
+        </plugin>
+        <!-- Maven's default Surefire cannot run JUnit 5, so the version is pinned. -->
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-surefire-plugin</artifactId>
+          <version>${maven-surefire-plugin.version}</version>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-resources-plugin</artifactId>
+          <version>${maven-resources-plugin.version}</version>
+        </plugin>
+      </plugins>
+    </pluginManagement>
+  </build>
+</project>

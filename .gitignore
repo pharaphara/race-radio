@@ -1,0 +1,25 @@
+# Build output
+target/
+
+# Secrets and personal data never enter this repository.
+# The athlete profile holds weight, thresholds and health notes; the database holds every
+# decision, conversation and workout photo; the LLM journal holds exactly what was sent to the
+# model about the athlete. Examples of the first two live next to them as *.example.*.
+.env
+.env.*
+!.env.example
+athlete.yaml
+*.db
+*.db-journal
+*.sqlite
+data/
+llm/
+photos/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.classpath
+.project
+.settings/
