@@ -31,10 +31,13 @@ public record CalendarEvent(
     }
 
     /**
-     * Intervals.icu fills the workout document only when it understood the description. Without
-     * it the workout does not sync to the watch, so a planned workout lacking one is a failure.
+     * Intervals.icu fills the workout document from the description, and that document is what the
+     * watch receives. It must exist <em>and</em> hold steps: an empty description yields a document
+     * that is present but has no step and lasts zero seconds, which arrives on the watch as an
+     * empty workout. Both count as not understood.
      */
     public boolean wasUnderstoodAsAWorkout() {
-        return workoutDoc != null && !workoutDoc.isNull();
+        return workoutDoc != null && !workoutDoc.isNull()
+                && workoutDoc.path("steps").isArray() && !workoutDoc.path("steps").isEmpty();
     }
 }

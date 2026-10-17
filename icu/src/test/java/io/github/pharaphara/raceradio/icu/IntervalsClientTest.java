@@ -91,14 +91,17 @@ class IntervalsClientTest {
     @Test
     void tellsItsOwnWorkoutsFromEveryoneElsesAndSpotsMisreadOnes() {
         responses.put("athlete/i42/events", """
-                [{"id":1,"category":"WORKOUT","external_id":"race-radio-abc","workout_doc":{"steps":[]}},
-                 {"id":2,"category":"WORKOUT","external_id":"rot-xyz","workout_doc":{"steps":[]}},
+                [{"id":1,"category":"WORKOUT","external_id":"race-radio-abc","workout_doc":{"steps":[{"duration":60}]}},
+                 {"id":2,"category":"WORKOUT","external_id":"rot-xyz","workout_doc":{"steps":[{"duration":60}]}},
                  {"id":3,"category":"NOTE","name":"A note"},
-                 {"id":4,"category":"WORKOUT","external_id":"race-radio-def","workout_doc":null}]""");
+                 {"id":4,"category":"WORKOUT","external_id":"race-radio-def","workout_doc":null},
+                 {"id":5,"category":"WORKOUT","external_id":"race-radio-ghi","workout_doc":{"steps":[],"duration":0}}]""");
         List<CalendarEvent> events = client.events(LocalDate.now(), LocalDate.now());
-        assertThat(events).filteredOn(CalendarEvent::ownedByRaceRadio).extracting(CalendarEvent::id).containsExactly(1L, 4L);
+        assertThat(events).filteredOn(CalendarEvent::ownedByRaceRadio).extracting(CalendarEvent::id).containsExactly(1L, 4L, 5L);
         assertThat(events.get(0).wasUnderstoodAsAWorkout()).isTrue();
         assertThat(events.get(3).wasUnderstoodAsAWorkout()).isFalse();
+        // An empty description gives a document that exists but holds nothing: an empty workout on the watch.
+        assertThat(events.get(4).wasUnderstoodAsAWorkout()).isFalse();
     }
 
     @Test

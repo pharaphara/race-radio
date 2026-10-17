@@ -26,3 +26,11 @@ A self-hosted triathlon coach on Telegram, backed by Intervals.icu. Public repos
 - Planned workouts reach the watch only if the athlete's `icu_garmin_upload_workouts` is true, and
   only if Intervals.icu filled `workout_doc`, which means it understood the description.
 - There is no webhook in the API: new activities are found by polling.
+- A workout is understood only if `workout_doc` exists **and** holds steps. An empty description
+  yields a document that is present but empty, which reaches the watch as an empty workout.
+- `DELETE events/{id}` takes `others`, which also deletes entries created at the same time.
+  `IntervalsWriter` always sends `others=false`.
+- `POST download-workout{ext}` (stateless conversion to .zwo) answers 500 with an API key: it needs
+  an OAuth session. Validation therefore happens after publication, by re-reading `workout_doc`;
+  a created event can be downloaded as .zwo through `events/{id}/download.zwo`.
+- Distances are written `400mtr` in workout text, because `m` means minutes.
