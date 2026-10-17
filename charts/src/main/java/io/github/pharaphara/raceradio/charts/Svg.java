@@ -8,8 +8,10 @@ public final class Svg {
     private final StringBuilder b = new StringBuilder();
     private final double width;
     private final double height;
+    private final Theme theme;
 
     public Svg(double width, double height, Theme theme) {
+        this.theme = theme;
         this.width = width;
         this.height = height;
         b.append("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"").append(n(width)).append("\" height=\"").append(n(height))
@@ -53,6 +55,13 @@ public final class Svg {
         return this;
     }
 
+    /** A dashed line, for a reference level such as a threshold. */
+    public Svg dashed(double x1, double y1, double x2, double y2, String stroke, double strokeWidth) {
+        b.append(String.format(Locale.ROOT, "<line x1=\"%.1f\" y1=\"%.1f\" x2=\"%.1f\" y2=\"%.1f\" stroke=\"%s\" stroke-width=\"%.1f\" stroke-dasharray=\"6 4\"/>%n",
+                x1, y1, x2, y2, stroke, strokeWidth));
+        return this;
+    }
+
     /** A 2 px polyline with round joins; NaN points break the line rather than dropping to zero. */
     public Svg path(double[] xs, double[] ys, String stroke) {
         StringBuilder d = new StringBuilder();
@@ -80,6 +89,16 @@ public final class Svg {
         b.append(String.format(Locale.ROOT, "<text x=\"%.1f\" y=\"%.1f\" font-size=\"%.1f\" fill=\"%s\" text-anchor=\"%s\"%s>%s</text>%n",
                 x, y, size, fill, anchor, bold ? " font-weight=\"bold\"" : "", esc(text)));
         return this;
+    }
+
+    /**
+     * Text over data: drawn twice, first as a thick outline in the surface colour, so the line
+     * beneath never cuts through a letter. Two passes rather than paint-order, which Batik ignores.
+     */
+    public Svg haloText(double x, double y, String text, double size, String fill, String anchor, boolean bold) {
+        b.append(String.format(Locale.ROOT, "<text x=\"%.1f\" y=\"%.1f\" font-size=\"%.1f\" fill=\"%s\" stroke=\"%s\" stroke-width=\"4\" stroke-linejoin=\"round\" text-anchor=\"%s\"%s>%s</text>%n",
+                x, y, size, theme.surface(), theme.surface(), anchor, bold ? " font-weight=\"bold\"" : "", esc(text)));
+        return text(x, y, text, size, fill, anchor, bold);
     }
 
     public String toString() {

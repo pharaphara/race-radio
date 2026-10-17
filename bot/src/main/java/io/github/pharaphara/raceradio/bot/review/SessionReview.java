@@ -124,7 +124,7 @@ public final class SessionReview {
         if (signal.isEmpty()) {
             return new Computed(new SessionFacts(a.id(), a.type(), a.start(), a.movingSeconds(), a.distanceMetres(), a.elevationGainMetres(),
                     a.load(), hrMean, false, null, null, null, null, List.of(), List.of(), false, List.of(),
-                    null, null, Map.of(), null, null), null, null);
+                    null, null, Map.of(), null, null, null, null), null, null);
         }
         EffortSignal s = signal.get();
         List<PlannedStep> plan = plannedWork(a, s, settings);
@@ -165,6 +165,9 @@ public final class SessionReview {
             double d = AerobicDecoupling.of(s.values(), hr.get());
             decoupling = Double.isNaN(d) ? null : round1(100 * d);
         }
+        Double threshold = settings.map(st -> s.unit().equals("W")
+                ? (st.thresholdPower() == null ? null : st.thresholdPower().doubleValue())
+                : st.thresholdSpeed()).orElse(null);
         Double dps = null;
         if (EffortSignal.SWIM.contains(a.type()) && streams.get("cadence").isPresent()) {
             double v = StrokeEfficiency.distancePerStroke(s.values(), streams.get("cadence").get());
@@ -172,7 +175,17 @@ public final class SessionReview {
         }
         return new Computed(new SessionFacts(a.id(), a.type(), a.start(), a.movingSeconds(), a.distanceMetres(), a.elevationGainMetres(),
                 a.load(), hrMean == null ? null : round1(hrMean), true, s.column(), s.unit(), structure.source().name(), structure.model(),
-                work, reps, !plan.isEmpty(), comparison, power, zoneModel, zones, decoupling, dps), s.values(), hr.orElse(null));
+                work, reps, !plan.isEmpty(), comparison, power, zoneModel, zones, decoupling, dps,
+                threshold, threshold == null ? null : thresholdName(a.type()) + " " + Formats.effort(threshold, s.unit(), a.type())),
+                s.values(), hr.orElse(null));
+    }
+
+    /** What the threshold is called in each sport: FTP on the bike, CSS in the water. */
+    private static String thresholdName(String type) {
+        if (EffortSignal.BIKE.contains(type)) {
+            return "FTP";
+        }
+        return EffortSignal.SWIM.contains(type) ? "CSS" : "seuil";
     }
 
     private List<PlannedStep> plannedWork(ActivitySummary a, EffortSignal s, Optional<SportSettings> settings) {

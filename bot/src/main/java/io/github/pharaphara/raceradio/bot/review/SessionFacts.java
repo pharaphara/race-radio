@@ -9,8 +9,11 @@ import java.util.Map;
  * the decision log keeps. Every number the review may quote is here, already formatted where a
  * reader would want it formatted (paces), so the model never has to compute one.
  *
- * @param enoughData  false when the session has no usable effort signal; the review must then
- *                    say there is not enough to judge, and must not change anything
+ * @param enoughData      false when the session has no usable effort signal; the review must then
+ *                        say there is not enough to judge, and must not change anything
+ * @param threshold       the athlete's declared threshold in the signal's unit (watts, or metres per
+ *                        second for a pace), or null when the profile has none
+ * @param thresholdLabel  the same as a reader says it: "FTP 261 W", "seuil 4:20/km", "CSS 2:00/100 m"
  */
 public record SessionFacts(
         String activityId, String sport, LocalDateTime start, Integer movingSeconds, Double distanceMetres,
@@ -19,7 +22,7 @@ public record SessionFacts(
         String structureSource, String structureModel, List<BlockFact> work, List<String> repetitions,
         boolean planned, List<ComparisonFact> againstPlan,
         PowerFacts power, String zoneModel, Map<String, Integer> secondsInZones,
-        Double aerobicDecouplingPercent, Double distancePerStrokeMetres) {
+        Double aerobicDecouplingPercent, Double distancePerStrokeMetres, Double threshold, String thresholdLabel) {
 
     /** One work block: where it sits, how long, and its mean effort as a reader would say it. */
     public record BlockFact(int startSecond, int seconds, String duration, String effort) {

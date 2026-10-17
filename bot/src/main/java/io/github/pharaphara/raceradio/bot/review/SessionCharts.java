@@ -54,7 +54,8 @@ public final class SessionCharts {
                     y -> String.valueOf(Math.round(y))).forSession().fullRange());
         }
         List<Charts.Band> bands = f.work().stream()
-                .map(b -> new Charts.Band(b.startSecond(), b.startSecond() + b.seconds())).toList();
+                .map(b -> new Charts.Band(b.startSecond(), b.startSecond() + b.seconds(),
+                        Formats.repDuration(b.seconds()) + " @ " + b.effort())).toList();
         String subtitle = (f.start() == null ? "" : f.start().format(DateTimeFormatter.ofPattern("d MMMM", Locale.FRANCE)) + " · ")
                 + (f.work().isEmpty() ? "pas de bloc de travail"
                 : ("DEVICE_LAPS".equals(f.structureSource()) ? "blocs repris des tours de ta montre" : "blocs détectés"));
@@ -79,8 +80,9 @@ public final class SessionCharts {
 
     private static Charts.Panel effortPanel(SessionFacts f, Samples effort) {
         if ("W".equals(f.unit())) {
-            return Charts.Panel.of("Puissance (W)", List.of(new Charts.Series("puissance", effort.toArray(), EFFORT)),
+            Charts.Panel power = Charts.Panel.of("Puissance (W)", List.of(new Charts.Series("puissance", effort.toArray(), EFFORT)),
                     y -> String.valueOf(Math.round(y))).forSession();
+            return f.threshold() == null ? power : power.withReference(f.threshold(), f.thresholdLabel());
         }
         boolean swim = EffortSignal.SWIM.contains(f.sport());
         double per = swim ? 100 : 1000;
@@ -88,8 +90,9 @@ public final class SessionCharts {
         for (int i = 0; i < pace.length; i++) {
             pace[i] = pace[i] > 0.3 ? per / pace[i] : Double.NaN; // standing still has no pace
         }
-        return Charts.Panel.of(swim ? "Allure (min/100 m)" : "Allure (min/km)", List.of(new Charts.Series("allure", pace, EFFORT)),
+        Charts.Panel panel = Charts.Panel.of(swim ? "Allure (min/100 m)" : "Allure (min/km)", List.of(new Charts.Series("allure", pace, EFFORT)),
                 y -> (int) y / 60 + ":" + String.format("%02d", Math.round(y) % 60)).inverted(swim ? 10 : 30).forSession();
+        return f.threshold() == null || !(f.threshold() > 0) ? panel : panel.withReference(per / f.threshold(), f.thresholdLabel());
     }
 
     private static final int MAX_TITLE_GROUPS = 3;
