@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>io.github.pharaphara.raceradio</groupId>
+    <artifactId>race-radio-parent</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>race-radio-charts</artifactId>
+  <name>race-radio-charts</name>
+  <description>Charts drawn once as SVG, for the web page, and rasterised to PNG for Telegram.</description>
+
+  <properties>
+    <batik.version>1.19</batik.version>
+  </properties>
+
+  <!--
+    The SVG is written by hand: a chart library would choose fonts, colours and spacing for us,
+    and the PNG sent to the phone would then differ from the page. Batik only rasterises.
+  -->
+  <dependencies>
+    <dependency>
+      <groupId>org.apache.xmlgraphics</groupId>
+      <artifactId>batik-transcoder</artifactId>
+      <version>${batik.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.xmlgraphics</groupId>
+      <artifactId>batik-codec</artifactId>
+      <version>${batik.version}</version>
+    </dependency>
+
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.assertj</groupId>
+      <artifactId>assertj-core</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+</project>

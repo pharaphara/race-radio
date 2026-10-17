@@ -26,6 +26,7 @@
       core   pure domain: zones, load, readiness, interval detection, segments, goals.
              No Spring, no HTTP, no LLM. Every number the coach states is computed here.
       icu    Intervals.icu client: reads, writes, dry-run, workout syntax validation.
+      charts charts drawn once as SVG, rasterised to PNG for Telegram.
       bot    the running service: Telegram, scheduling, the language model, ledger and journal.
 
     The boundary is the point. Because core cannot see the network or the model, no calculation
@@ -34,6 +35,7 @@
   <modules>
     <module>core</module>
     <module>icu</module>
+    <module>charts</module>
     <module>bot</module>
   </modules>
 
