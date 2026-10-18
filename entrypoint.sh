@@ -22,7 +22,9 @@ if [ "$TRANSPORT" = "subscription" ]; then
 else
     MODEL_AUTH="ANTHROPIC_API_KEY $(ok "$ANTHROPIC_API_KEY")"
 fi
-if [ "${RACE_RADIO_DRY_RUN:-true}" = "false" ]; then
+if [ -n "${RACE_RADIO_WRITES:-}" ]; then
+    WRITES="only these are written to Intervals.icu: $RACE_RADIO_WRITES (the rest is a dry run)"
+elif [ "${RACE_RADIO_DRY_RUN:-true}" = "false" ]; then
     WRITES="live: workouts, notes and reviews are written to Intervals.icu"
 else
     WRITES="dry run: nothing is written to Intervals.icu (RACE_RADIO_DRY_RUN=false to go live)"

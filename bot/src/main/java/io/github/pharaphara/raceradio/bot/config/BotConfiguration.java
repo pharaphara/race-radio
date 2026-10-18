@@ -66,10 +66,13 @@ public class BotConfiguration {
     }
 
     @Bean
-    IntervalsWriter intervalsWriter(IntervalsClient client) {
-        IntervalsWriter.Mode mode = props.dryRun() ? IntervalsWriter.Mode.DRY_RUN : IntervalsWriter.Mode.LIVE;
-        LOG.info("Intervals.icu writes: {}", mode);
-        return new IntervalsWriter(client, mode, line -> LOG.info("intervals.icu {}", line));
+    IntervalsWriter intervalsWriter(IntervalsClient client,
+                                    @org.springframework.beans.factory.annotation.Value("${race-radio.writes:}") String writes) {
+        // RACE_RADIO_WRITES opens writes kind by kind; without it, RACE_RADIO_DRY_RUN=false opens them all.
+        java.util.Set<IntervalsWriter.Write> allowed = !writes.isBlank() ? IntervalsWriter.Write.parse(writes)
+                : props.dryRun() ? java.util.EnumSet.noneOf(IntervalsWriter.Write.class) : java.util.EnumSet.allOf(IntervalsWriter.Write.class);
+        LOG.info("Intervals.icu writes: {}", allowed.isEmpty() ? "DRY_RUN" : allowed);
+        return new IntervalsWriter(client, allowed, line -> LOG.info("intervals.icu {}", line));
     }
 
     @Bean
@@ -152,7 +155,7 @@ public class BotConfiguration {
 
     @Bean
     CommandRouter commandRouter(TelegramClient telegram, MorningCheck morning, FeelStore feels, DecisionLog decisions,
-                                Ledger ledger, Journal journal, CoachModel model, Clock clock,
+                                Ledger ledger, Journal journal, CoachModel model, Clock clock, IntervalsWriter writer,
                                 io.github.pharaphara.raceradio.bot.chat.Conversation conversation,
                                 io.github.pharaphara.raceradio.bot.store.Conversations memory,
                                 io.github.pharaphara.raceradio.bot.strength.BoardReader boards,
@@ -162,7 +165,7 @@ public class BotConfiguration {
                                 io.github.pharaphara.raceradio.bot.plan.SessionCreator sessions,
                                 io.github.pharaphara.raceradio.bot.archive.Trends trends) {
         return new CommandRouter(telegram, props.telegram().allowedChatId(), morning, feels, decisions, ledger, journal,
-                model, clock, props.zone(), props.dryRun(), conversation, memory, boards, planCommands, adapter, merger, sessions, trends);
+                model, clock, props.zone(), writer.allowed().isEmpty(), conversation, memory, boards, planCommands, adapter, merger, sessions, trends);
     }
 
     @Bean

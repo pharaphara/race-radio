@@ -59,6 +59,11 @@ public final class Planner {
         return new Thresholds(ftp, run, css);
     }
 
+    /** Whether published workouts really reach the calendar, or are only described (dry run). */
+    public boolean publishes() {
+        return writer.allows(IntervalsWriter.Write.WORKOUTS);
+    }
+
     public Week nextWeek() {
         LocalDate monday = LocalDate.now(clock).with(TemporalAdjusters.next(DayOfWeek.MONDAY));
         return week(monday);

@@ -68,6 +68,28 @@ class IntervalsWriterTest {
     }
 
     @Test
+    void writesOpenKindByKindAndEverythingElseStaysADryRun() {
+        assertThat(IntervalsWriter.Write.parse(" workouts, Notes ")).containsExactlyInAnyOrder(
+                IntervalsWriter.Write.WORKOUTS, IntervalsWriter.Write.NOTES);
+        assertThat(IntervalsWriter.Write.parse("all")).hasSize(IntervalsWriter.Write.values().length);
+        assertThat(IntervalsWriter.Write.parse("")).isEmpty();
+
+        IntervalsWriter w = new IntervalsWriter(client, java.util.EnumSet.of(IntervalsWriter.Write.WORKOUTS), journal::add);
+        assertThat(w.mode()).isEqualTo(IntervalsWriter.Mode.DRY_RUN);
+        assertThat(w.allows(IntervalsWriter.Write.WORKOUTS)).isTrue();
+        w.publishNote(DAY, "Green", "train as planned");
+        w.comment("a1", "well done");
+        w.replaceIntervals("a1", List.of(), List.of());
+        assertThat(requests).allMatch(r -> r.startsWith("GET "));
+        assertThat(journal).hasSize(3).allMatch(j -> j.startsWith("DRY RUN "));
+
+        responses.put("POST athlete/i42/events", "{\"id\":7,\"external_id\":\"race-radio-x\",\"category\":\"WORKOUT\"}");
+        responses.put("GET athlete/i42/events/7", "{\"id\":7,\"external_id\":\"race-radio-x\",\"category\":\"WORKOUT\",\"workout_doc\":" + UNDERSTOOD_DOC + "}");
+        assertThat(w.publishWorkout(DAY, SampleWorkouts.bikeVo2())).isPresent();
+        assertThat(requests).anyMatch(r -> r.startsWith("POST athlete/i42/events"));
+    }
+
+    @Test
     void aDryRunSendsNoWriteAtAllAndDescribesEachOne() {
         IntervalsWriter w = writer(IntervalsWriter.Mode.DRY_RUN);
         assertThat(w.publishWorkout(DAY, SampleWorkouts.bikeVo2())).isEmpty();

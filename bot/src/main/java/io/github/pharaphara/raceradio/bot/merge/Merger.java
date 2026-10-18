@@ -57,7 +57,7 @@ public final class Merger {
         }
         String text = "Fusion proposée :\n• " + line(first) + "\n• " + line(second)
                 + "\nLa première reçoit les données des deux et Intervals.icu la recalcule ; la seconde est ensuite supprimée."
-                + (writer.mode() == IntervalsWriter.Mode.DRY_RUN ? "\n(Mode sec : rien ne sera écrit.)" : "");
+                + (!writer.allows(IntervalsWriter.Write.MERGE) ? "\n(Mode sec : rien ne sera écrit.)" : "");
         return new Preview(first, second, text, true);
     }
 
@@ -72,11 +72,11 @@ public final class Merger {
                 columns(intervals.streams(p.second().id())), between);
         writer.replaceStreams(p.first().id(), joined);
         writer.deleteMergedActivity(p.second().id(), p.first().id());
-        if (writer.mode() != IntervalsWriter.Mode.DRY_RUN) {
+        if (writer.allows(IntervalsWriter.Write.MERGE)) {
             changed.accept(p.first().id());
             changed.accept(p.second().id());
         }
-        return writer.mode() == IntervalsWriter.Mode.DRY_RUN
+        return !writer.allows(IntervalsWriter.Write.MERGE)
                 ? "Mode sec : la fusion a été préparée mais rien n'a été écrit."
                 : "Fusionnées : « " + p.first().name() + " » contient maintenant les deux parties.";
     }
