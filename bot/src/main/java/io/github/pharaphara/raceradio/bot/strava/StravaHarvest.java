@@ -33,6 +33,7 @@ public class StravaHarvest {
     }
 
     private final StravaClient strava;
+    private final int pageSize;
     private final JdbcTemplate jdbc;
     private final Clock clock;
     private volatile Instant pausedUntil = Instant.EPOCH;
@@ -41,6 +42,11 @@ public class StravaHarvest {
     static final java.time.Duration LIST_EVERY = java.time.Duration.ofHours(6);
 
     public StravaHarvest(StravaClient strava, JdbcTemplate jdbc, Clock clock) {
+        this(strava, jdbc, clock, PAGE);
+    }
+
+    StravaHarvest(StravaClient strava, JdbcTemplate jdbc, Clock clock, int pageSize) {
+        this.pageSize = pageSize;
         this.strava = strava;
         this.jdbc = jdbc;
         this.clock = clock;
@@ -70,12 +76,20 @@ public class StravaHarvest {
         return progress();
     }
 
-    /** Pages back through the athlete's activities until a page holds nothing new. */
+    /**
+     * Pages back through the athlete's activities. Until the whole history has been listed once, it
+     * goes to the last page, page after page across runs if the quota cuts it; after that, it stops
+     * at the first page holding nothing new.
+     */
     void listActivities() {
         String now = clock.instant().toString();
-        for (int page = 1; ; page++) {
-            JsonNode list = strava.get("athlete/activities?per_page=" + PAGE + "&page=" + page);
+        boolean complete = !jdbc.queryForList("SELECT value FROM setting WHERE key = 'strava.listed_all'", String.class).isEmpty();
+        int startPage = complete ? 1 : jdbc.queryForList("SELECT value FROM setting WHERE key = 'strava.next_page'", String.class)
+                .stream().findFirst().map(Integer::parseInt).orElse(1);
+        for (int page = startPage; ; page++) {
+            JsonNode list = strava.get("athlete/activities?per_page=" + pageSize + "&page=" + page);
             if (!list.isArray() || list.isEmpty()) {
+                setting("strava.listed_all", "true");
                 return;
             }
             int added = 0;
@@ -84,10 +98,21 @@ public class StravaHarvest {
                         a.path("id").asLong(), a.path("start_date_local").asString().substring(0, 10),
                         a.path("sport_type").asString(), a.toString(), now);
             }
-            if (added == 0 || list.size() < PAGE) {
+            if (list.size() < pageSize) {
+                setting("strava.listed_all", "true");
                 return;
             }
+            if (complete && added == 0) {
+                return;
+            }
+            if (!complete) {
+                setting("strava.next_page", String.valueOf(page + 1));
+            }
         }
+    }
+
+    private void setting(String key, String value) {
+        jdbc.update("INSERT INTO setting (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", key, value);
     }
 
     /** Fetches each activity with every segment effort in it, newest first. */
