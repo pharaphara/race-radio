@@ -120,3 +120,36 @@ CREATE TABLE IF NOT EXISTS computed_metric (
     value        REAL NOT NULL,
     PRIMARY KEY (activity_id, metric)
 );
+
+-- Strava, harvested before the subscription ends, kept whole: activities with every segment
+-- crossed, segments with their GPS trace. Nothing here needs Strava once harvested.
+CREATE TABLE IF NOT EXISTS strava_activity (
+    id          INTEGER PRIMARY KEY,
+    day         TEXT NOT NULL,
+    sport       TEXT NOT NULL,
+    summary     TEXT NOT NULL,
+    detail      TEXT,
+    fetched_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS strava_activity_day ON strava_activity (day);
+
+CREATE TABLE IF NOT EXISTS strava_segment (
+    id          INTEGER PRIMARY KEY,
+    name        TEXT NOT NULL,
+    detail      TEXT,
+    fetched_at  TEXT
+);
+
+CREATE TABLE IF NOT EXISTS strava_effort (
+    id               INTEGER PRIMARY KEY,
+    segment_id       INTEGER NOT NULL,
+    activity_id      INTEGER NOT NULL,
+    day              TEXT NOT NULL,
+    elapsed_seconds  INTEGER NOT NULL,
+    moving_seconds   INTEGER,
+    average_watts    REAL,
+    average_hr       REAL,
+    pr_rank          INTEGER,
+    json             TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS strava_effort_segment ON strava_effort (segment_id, day);

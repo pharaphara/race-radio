@@ -104,6 +104,27 @@ public class BotConfiguration {
     }
 
     @Bean
+    io.github.pharaphara.raceradio.bot.strava.StravaClient stravaClient(org.springframework.jdbc.core.JdbcTemplate jdbc, Clock clock,
+            @org.springframework.beans.factory.annotation.Value("${race-radio.strava.client-id:}") String id,
+            @org.springframework.beans.factory.annotation.Value("${race-radio.strava.client-secret:}") String secret,
+            @org.springframework.beans.factory.annotation.Value("${race-radio.strava.refresh-token:}") String refresh) {
+        return new io.github.pharaphara.raceradio.bot.strava.StravaClient(id, secret, refresh, jdbc, clock);
+    }
+
+    @Bean
+    io.github.pharaphara.raceradio.bot.strava.StravaHarvest stravaHarvest(io.github.pharaphara.raceradio.bot.strava.StravaClient strava,
+                                                                        org.springframework.jdbc.core.JdbcTemplate jdbc, Clock clock) {
+        return new io.github.pharaphara.raceradio.bot.strava.StravaHarvest(strava, jdbc, clock);
+    }
+
+    @Bean
+    io.github.pharaphara.raceradio.bot.strava.Segments segments(org.springframework.jdbc.core.JdbcTemplate jdbc,
+                                                              io.github.pharaphara.raceradio.bot.strava.StravaHarvest harvest,
+                                                              TelegramClient telegram) {
+        return new io.github.pharaphara.raceradio.bot.strava.Segments(jdbc, harvest, telegram, props.telegram().allowedChatId());
+    }
+
+    @Bean
     io.github.pharaphara.raceradio.bot.archive.StreamCache streamCache(IntervalsClient intervals) {
         return new io.github.pharaphara.raceradio.bot.archive.StreamCache(intervals, props.dataDir().resolve("streams"));
     }
@@ -163,9 +184,10 @@ public class BotConfiguration {
                                 io.github.pharaphara.raceradio.bot.plan.Adapter adapter,
                                 io.github.pharaphara.raceradio.bot.merge.Merger merger,
                                 io.github.pharaphara.raceradio.bot.plan.SessionCreator sessions,
-                                io.github.pharaphara.raceradio.bot.archive.Trends trends) {
+                                io.github.pharaphara.raceradio.bot.archive.Trends trends,
+                                io.github.pharaphara.raceradio.bot.strava.Segments segments) {
         return new CommandRouter(telegram, props.telegram().allowedChatId(), morning, feels, decisions, ledger, journal,
-                model, clock, props.zone(), writer.allowed().isEmpty(), conversation, memory, boards, planCommands, adapter, merger, sessions, trends);
+                model, clock, props.zone(), writer.allowed().isEmpty(), conversation, memory, boards, planCommands, adapter, merger, sessions, trends, segments);
     }
 
     @Bean
