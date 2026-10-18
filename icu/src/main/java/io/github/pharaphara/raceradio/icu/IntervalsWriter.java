@@ -22,8 +22,8 @@ import java.util.function.Consumer;
  *
  * <p>Three guarantees live here, so that no other code has to remember them:
  * <ul>
- *   <li><b>Dry run.</b> In {@link Mode#DRY_RUN} every write is described to the journal and none
- *       is sent.</li>
+ *   <li><b>Dry run.</b> A write of a kind not allowed ({@link Write}) is described to the journal
+ *       and not sent; {@link Mode#DRY_RUN} allows none.</li>
  *   <li><b>Ownership.</b> Every calendar entry created carries {@code external_id} starting with
  *       {@value CalendarEvent#OWN_PREFIX}, and an entry without that prefix is never modified or
  *       deleted: workouts from other tools and entries made by hand are out of reach.</li>
@@ -41,6 +41,41 @@ public final class IntervalsWriter {
         DRY_RUN
     }
 
+    /**
+     * What may be written, so writes can be opened one kind at a time: workouts can reach the
+     * watch while rewriting an activity's intervals stays a dry run until it has been checked.
+     */
+    public enum Write {
+        /** Workouts on the calendar, and lightening or removing the coach's own. */
+        WORKOUTS,
+        /** The morning verdict as a calendar note. */
+        NOTES,
+        /** Reviews posted under activities, and activity descriptions. */
+        COMMENTS,
+        /** An activity's intervals replaced by the detected blocks. */
+        INTERVALS,
+        /** Two activities merged into one. */
+        MERGE;
+
+        /** Parses "workouts,notes" (any case, any spacing); "all" means every kind, blank none. */
+        public static java.util.Set<Write> parse(String list) {
+            java.util.Set<Write> out = java.util.EnumSet.noneOf(Write.class);
+            if (list == null) {
+                return out;
+            }
+            for (String s : list.split("[,;\\s]+")) {
+                if (s.isBlank()) {
+                    continue;
+                }
+                if (s.equalsIgnoreCase("all")) {
+                    return java.util.EnumSet.allOf(Write.class);
+                }
+                out.add(Write.valueOf(s.strip().toUpperCase(java.util.Locale.ROOT)));
+            }
+            return out;
+        }
+    }
+
     /** The calendar misread a workout; the entry was removed. */
     public static final class WorkoutNotUnderstood extends RuntimeException {
         private final List<String> disagreements;
@@ -56,17 +91,32 @@ public final class IntervalsWriter {
     }
 
     private final IntervalsClient client;
-    private final Mode mode;
+    private final java.util.Set<Write> allowed;
     private final Consumer<String> journal;
 
     public IntervalsWriter(IntervalsClient client, Mode mode, Consumer<String> journal) {
+        this(client, mode == Mode.LIVE ? java.util.EnumSet.allOf(Write.class) : java.util.EnumSet.noneOf(Write.class), journal);
+    }
+
+    /** @param allowed  the kinds actually sent; every other write is only described, as in dry run */
+    public IntervalsWriter(IntervalsClient client, java.util.Set<Write> allowed, Consumer<String> journal) {
         this.client = client;
-        this.mode = mode;
+        this.allowed = java.util.Set.copyOf(allowed);
         this.journal = journal;
     }
 
+    /** LIVE only when every kind of write is sent. */
     public Mode mode() {
-        return mode;
+        return allowed.size() == Write.values().length ? Mode.LIVE : Mode.DRY_RUN;
+    }
+
+    /** Whether this kind of write is actually sent. */
+    public boolean allows(Write kind) {
+        return allowed.contains(kind);
+    }
+
+    public java.util.Set<Write> allowed() {
+        return allowed;
     }
 
     /**
@@ -82,7 +132,7 @@ public final class IntervalsWriter {
                     + "(icu_garmin_upload_workouts is off): a published workout would never reach the watch");
         }
         Map<String, Object> body = event(day, "WORKOUT", workout.sport(), workout.name(), text);
-        Optional<CalendarEvent> created = postEvent(body);
+        Optional<CalendarEvent> created = postEvent(Write.WORKOUTS, body);
         if (created.isEmpty()) {
             return created;
         }
@@ -100,7 +150,7 @@ public final class IntervalsWriter {
      * restored after an adjustment is undone. Kept only if the calendar understands it again.
      */
     public Optional<CalendarEvent> publishText(LocalDate day, String sport, String name, String description) {
-        Optional<CalendarEvent> created = postEvent(event(day, "WORKOUT", sport, name, description));
+        Optional<CalendarEvent> created = postEvent(Write.WORKOUTS, event(day, "WORKOUT", sport, name, description));
         if (created.isEmpty()) {
             return created;
         }
@@ -114,7 +164,7 @@ public final class IntervalsWriter {
 
     /** A note on the calendar, such as the morning verdict and its reasons. */
     public Optional<CalendarEvent> publishNote(LocalDate day, String title, String text) {
-        return postEvent(event(day, "NOTE", null, title, text));
+        return postEvent(Write.NOTES, event(day, "NOTE", null, title, text));
     }
 
     /**
@@ -127,7 +177,8 @@ public final class IntervalsWriter {
         if (!e.ownedByRaceRadio()) {
             throw new IllegalStateException("refusing to delete calendar entry " + eventId + ": not created by race-radio");
         }
-        write("DELETE", client.athletePath("events/" + eventId + "?others=false"), null);
+        write(e.category() != null && e.category().equals("NOTE") ? Write.NOTES : Write.WORKOUTS,
+                "DELETE", client.athletePath("events/" + eventId + "?others=false"), null);
     }
 
     /** Replaces an activity's intervals with the blocks found, so the calendar shows them too. */
@@ -144,7 +195,7 @@ public final class IntervalsWriter {
             iv.put("label", labels.get(i));
             body.add(iv);
         }
-        write("PUT", "activity/" + activityId + "/intervals", body);
+        write(Write.INTERVALS, "PUT", "activity/" + activityId + "/intervals", body);
     }
 
     /**
@@ -170,7 +221,7 @@ public final class IntervalsWriter {
             latlng.put("data2", nullable(columns.get("lng")));
             body.add(latlng);
         }
-        write("PUT", "activity/" + activityId + "/streams", body);
+        write(Write.MERGE, "PUT", "activity/" + activityId + "/streams", body);
     }
 
     /**
@@ -182,7 +233,7 @@ public final class IntervalsWriter {
         if (activityId.equals(mergedInto)) {
             throw new IllegalArgumentException("an activity cannot be merged into itself");
         }
-        write("DELETE", "activity/" + activityId, null);
+        write(Write.MERGE, "DELETE", "activity/" + activityId, null);
     }
 
     private static List<Double> nullable(double[] v) {
@@ -195,12 +246,12 @@ public final class IntervalsWriter {
 
     /** Posts the session review under the activity, where it stays next to the data. */
     public void comment(String activityId, String text) {
-        write("POST", "activity/" + activityId + "/messages", Map.of("content", text));
+        write(Write.COMMENTS, "POST", "activity/" + activityId + "/messages", Map.of("content", text));
     }
 
     /** Sets an activity's description, for instance the workout read from a photo of the board. */
     public void describe(String activityId, String description) {
-        write("PUT", "activity/" + activityId, Map.of("description", description));
+        write(Write.COMMENTS, "PUT", "activity/" + activityId, Map.of("description", description));
     }
 
     private Map<String, Object> event(LocalDate day, String category, String type, String name, String description) {
@@ -216,16 +267,16 @@ public final class IntervalsWriter {
         return body;
     }
 
-    private Optional<CalendarEvent> postEvent(Map<String, Object> body) {
-        String response = write("POST", client.athletePath("events"), body);
+    private Optional<CalendarEvent> postEvent(Write kind, Map<String, Object> body) {
+        String response = write(kind, "POST", client.athletePath("events"), body);
         return response == null ? Optional.empty()
                 : Optional.of(IntervalsClient.json().readValue(response, CalendarEvent.class));
     }
 
     /** Sends one write, or in dry run only describes it. Returns the response body, or null in dry run. */
-    private String write(String method, String path, Object body) {
+    private String write(Write kind, String method, String path, Object body) {
         String json = body == null ? "" : IntervalsClient.json().writeValueAsString(body);
-        if (mode == Mode.DRY_RUN) {
+        if (!allowed.contains(kind)) {
             journal.accept("DRY RUN " + method + " " + path + (json.isEmpty() ? "" : " " + json));
             return null;
         }

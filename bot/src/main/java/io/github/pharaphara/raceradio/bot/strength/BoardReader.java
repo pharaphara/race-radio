@@ -63,7 +63,7 @@ public final class BoardReader {
         }
         writer.describe(session.get().id(), text + "\n\n(lu sur la photo du tableau par race-radio)");
         return text + "\n\nAjouté à « " + session.get().name() + " » dans Intervals.icu"
-                + (writer.mode() == IntervalsWriter.Mode.DRY_RUN ? " (mode sec : rien n'a été écrit)." : ".");
+                + (!writer.allows(IntervalsWriter.Write.COMMENTS) ? " (mode sec : rien n'a été écrit)." : ".");
     }
 
     /** From the file's first bytes: Telegram sends JPEG, but nothing forbids a PNG. */

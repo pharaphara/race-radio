@@ -116,7 +116,7 @@ public class Schedules implements SchedulingConfigurer {
             if (plans.mode() == io.github.pharaphara.raceradio.bot.store.Plans.Mode.PLAN && !next.sessions().isEmpty()) {
                 var problems = planner.publish(next);
                 b.append(problems.isEmpty()
-                        ? (props.dryRun() ? "\n\nMode sec : rien n'a été publié." : "\n\nPubliée dans Intervals.icu, elle arrive sur ta montre.")
+                        ? (!planner.publishes() ? "\n\nMode sec : rien n'a été publié." : "\n\nPubliée dans Intervals.icu, elle arrive sur ta montre.")
                         : "\n\nNon publié : " + String.join(" ; ", problems));
             }
             planner.feasibility().ifPresent(f -> b.append("\n\n").append(planner.describe(f)));

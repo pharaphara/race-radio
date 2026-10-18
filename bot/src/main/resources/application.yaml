@@ -23,6 +23,8 @@ management:
 race-radio:
   # Nothing is written to Intervals.icu until this is explicitly switched off.
   dry-run: ${RACE_RADIO_DRY_RUN:true}
+  # Or open writes kind by kind: workouts, notes, comments, intervals, merge (or all). Overrides dry-run.
+  writes: ${RACE_RADIO_WRITES:}
   zone: Europe/Paris
   data-dir: ${RACE_RADIO_DATA_DIR:./data}
   temperament: COMMITTED
