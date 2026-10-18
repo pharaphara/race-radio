@@ -25,6 +25,11 @@ race-radio:
   dry-run: ${RACE_RADIO_DRY_RUN:true}
   # Or open writes kind by kind: workouts, notes, comments, intervals, merge (or all). Overrides dry-run.
   writes: ${RACE_RADIO_WRITES:}
+  # A personal Strava API app, to harvest segments before a subscription ends. Optional.
+  strava:
+    client-id: ${STRAVA_CLIENT_ID:}
+    client-secret: ${STRAVA_CLIENT_SECRET:}
+    refresh-token: ${STRAVA_REFRESH_TOKEN:}
   zone: Europe/Paris
   data-dir: ${RACE_RADIO_DATA_DIR:./data}
   temperament: COMMITTED

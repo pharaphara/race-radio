@@ -30,6 +30,7 @@ public class Schedules implements SchedulingConfigurer {
     private final io.github.pharaphara.raceradio.bot.store.Plans plans;
     private final io.github.pharaphara.raceradio.bot.plan.Adapter adapter;
     private final io.github.pharaphara.raceradio.bot.archive.Archive archive;
+    private final io.github.pharaphara.raceradio.bot.strava.StravaHarvest strava;
 
     private final String once;
 
@@ -37,7 +38,9 @@ public class Schedules implements SchedulingConfigurer {
                      @org.springframework.beans.factory.annotation.Value("${race-radio.once:}") String once,
                      io.github.pharaphara.raceradio.bot.plan.Planner planner, io.github.pharaphara.raceradio.bot.store.Plans plans,
                      io.github.pharaphara.raceradio.bot.plan.Adapter adapter,
-                     io.github.pharaphara.raceradio.bot.archive.Archive archive) {
+                     io.github.pharaphara.raceradio.bot.archive.Archive archive,
+                     io.github.pharaphara.raceradio.bot.strava.StravaHarvest strava) {
+        this.strava = strava;
         this.archive = archive;
         this.adapter = adapter;
         this.planner = planner;
@@ -64,6 +67,8 @@ public class Schedules implements SchedulingConfigurer {
         // The local archive: a year of history once, in the background, then the last month every night.
         registrar.addCronTask(new CronTask(() -> archive.refresh(30), daily(LocalTime.of(3, 45))));
         Thread.ofVirtual().name("archive-backfill").start(archive::backfill);
+        // Strava segments, harvested within the read quota: a step every quarter hour, idle once done.
+        registrar.addFixedDelayTask(strava::run, java.time.Duration.ofMinutes(15));
     }
 
     void morningCall() {

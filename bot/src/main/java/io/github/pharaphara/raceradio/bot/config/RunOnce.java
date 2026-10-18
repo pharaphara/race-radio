@@ -21,6 +21,7 @@ import java.time.LocalDate;
  *   <li>{@code --race-radio.once=review:<activity id>}: the review of one activity of the last year.</li>
  *   <li>{@code --race-radio.once=session:<request>}: the draft of one workout, shown, never published.</li>
  *   <li>{@code --race-radio.once=archive}: fills the local archive, as the service does in the background.</li>
+ *   <li>{@code --race-radio.once=strava}: one step of the Strava segment harvest.</li>
  *   <li>{@code --race-radio.once=trend:<metric>}: one metric over twelve months, from the archive.</li>
  * </ul>
  */
@@ -37,13 +38,16 @@ public class RunOnce implements ApplicationRunner {
     private final io.github.pharaphara.raceradio.bot.plan.SessionCreator sessions;
     private final io.github.pharaphara.raceradio.bot.archive.Archive archive;
     private final io.github.pharaphara.raceradio.bot.archive.Trends trends;
+    private final io.github.pharaphara.raceradio.bot.strava.StravaHarvest strava;
 
     public RunOnce(@Value("${race-radio.once:}") String once, MorningCheck morning, SessionReview review,
                    IntervalsClient intervals, ConfigurableApplicationContext context, RaceRadioProperties props,
                    io.github.pharaphara.raceradio.bot.strength.BoardReader boards,
                    io.github.pharaphara.raceradio.bot.plan.SessionCreator sessions,
                    io.github.pharaphara.raceradio.bot.archive.Archive archive,
-                   io.github.pharaphara.raceradio.bot.archive.Trends trends) {
+                   io.github.pharaphara.raceradio.bot.archive.Trends trends,
+                   io.github.pharaphara.raceradio.bot.strava.StravaHarvest strava) {
+        this.strava = strava;
         this.archive = archive;
         this.trends = trends;
         this.sessions = sessions;
@@ -79,6 +83,8 @@ public class RunOnce implements ApplicationRunner {
             } catch (java.io.IOException e) {
                 throw new java.io.UncheckedIOException(e);
             }
+        } else if (once.equals("strava")) {
+            System.out.println("\nstrava: " + strava.run());
         } else if (once.equals("archive")) {
             archive.backfill();
             System.out.println("\narchive: " + archive.activities() + " activities");
@@ -95,7 +101,7 @@ public class RunOnce implements ApplicationRunner {
             byte[] chart = morning.fitnessChart();
             save("fitness", chart == null ? java.util.List.of() : java.util.List.of(chart));
         } else {
-            throw new IllegalArgumentException("race-radio.once must be morning, fitness, archive, trend:<metric>, "
+            throw new IllegalArgumentException("race-radio.once must be morning, fitness, archive, strava, trend:<metric>, "
                     + "review:<activity id>, photo:<file> or session:<request>");
         }
         System.exit(SpringApplication.exit(context, () -> 0));

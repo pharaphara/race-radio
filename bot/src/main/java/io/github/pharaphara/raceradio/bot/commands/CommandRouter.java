@@ -44,6 +44,7 @@ public final class CommandRouter {
             /note j'ai mal au mollet gauche · un fait que le coach doit garder en tête
             /notes · les faits gardés · /oubli 3 · en retirer un
             /tendance vélo efficacité 12 mois · une mesure dans le temps (/tendance seul : la liste)
+            /segment · tes segments habituels · /segment jonte · l'historique d'un segment
             /cout · les appels au modèle ce mois-ci
             /dernierenvoi · ce qui a été envoyé au modèle la dernière fois
             /aide · cette liste
@@ -72,6 +73,7 @@ public final class CommandRouter {
     private final io.github.pharaphara.raceradio.bot.merge.Merger merger;
     private final io.github.pharaphara.raceradio.bot.plan.SessionCreator sessions;
     private final io.github.pharaphara.raceradio.bot.archive.Trends trends;
+    private final io.github.pharaphara.raceradio.bot.strava.Segments segments;
 
     public CommandRouter(TelegramClient telegram, long chatId, MorningCheck morning, FeelStore feels, DecisionLog decisions,
                          Ledger ledger, Journal journal, CoachModel model, Clock clock, ZoneId zone, boolean dryRun,
@@ -82,7 +84,9 @@ public final class CommandRouter {
                          io.github.pharaphara.raceradio.bot.plan.Adapter adapter,
                          io.github.pharaphara.raceradio.bot.merge.Merger merger,
                          io.github.pharaphara.raceradio.bot.plan.SessionCreator sessions,
-                         io.github.pharaphara.raceradio.bot.archive.Trends trends) {
+                         io.github.pharaphara.raceradio.bot.archive.Trends trends,
+                         io.github.pharaphara.raceradio.bot.strava.Segments segments) {
+        this.segments = segments;
         this.trends = trends;
         this.sessions = sessions;
         this.merger = merger;
@@ -178,6 +182,10 @@ public final class CommandRouter {
             }
             case "/fusionner" -> {
                 merge(text);
+                yield null;
+            }
+            case "/segment", "/segments" -> {
+                segments.handle(text);
                 yield null;
             }
             case "/tendance", "/tendances" -> {

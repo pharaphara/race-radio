@@ -57,14 +57,42 @@ subscription or an Anthropic API key.
    docker compose logs race-radio    # what is configured, what is missing
    ```
 
-6. **Check before trusting it.** Nothing is written to Intervals.icu until `RACE_RADIO_DRY_RUN=false`.
+6. **Check before trusting it.** Nothing is written to Intervals.icu until `RACE_RADIO_DRY_RUN=false`,
+   or open writes one kind at a time with `RACE_RADIO_WRITES` (`workouts`, `notes`, `comments`,
+   `intervals`, `merge`, or `all`), the others staying a dry run.
    One-off jobs print their result and exit, without Telegram:
 
    ```bash
    docker compose run --rm race-radio --race-radio.once=morning
    docker compose run --rm race-radio --race-radio.once=review:<activity id>
    docker compose run --rm race-radio --race-radio.once=fitness
+   docker compose run --rm race-radio --race-radio.once=session:"demain cap facile"
+   docker compose run --rm race-radio --race-radio.once=trend:"vélo efficacité"
    ```
+
+7. **Strava segments (optional).** To keep every segment you cross, with its GPS trace, before a
+   Strava subscription ends: create an app at <https://www.strava.com/settings/api> with the
+   callback domain `localhost`, set `STRAVA_CLIENT_ID` and `STRAVA_CLIENT_SECRET`, then authorise
+   it once by opening
+
+   ```
+   https://www.strava.com/oauth/authorize?client_id=<id>&response_type=code&redirect_uri=http://localhost/exchange_token&approval_prompt=force&scope=read,activity:read_all,profile:read_all
+   ```
+
+   The browser lands on an unreachable `localhost` page whose address holds `code=…`; exchange it
+   within minutes:
+
+   ```bash
+   curl -s https://www.strava.com/oauth/token -d client_id=<id> -d client_secret=<secret> \
+        -d code=<code> -d grant_type=authorization_code
+   ```
+
+   and set `STRAVA_REFRESH_TOKEN` from the answer. The token on the app's settings page only has the
+   `read` scope, which cannot list activities. The harvest then runs in the background within the
+   read quota, and resumes where it stopped.
+
+The local archive (`/data`) keeps every activity and wellness day as Intervals.icu sent them, and
+each activity's streams once: questions about any period are answered without calling it again.
 
 ## On Telegram
 
@@ -79,10 +107,14 @@ subscription or an Anthropic API key.
 | `/sports natation off` | sports in season |
 | `/mode planifier` · `ajuster` · `analyser` | how much the coach does with the calendar |
 | `/plan` | next week and what your hours can buy |
+| `/seance demain cap facile` | one workout, proposed and calibrated, then Publier, Modifier or Annuler |
+| `/tendance vélo efficacité 12 mois` | one metric over months, from the archive (`/tendance` alone lists them) |
+| `/segment` · `/segment jonte` | your regular segments, and one segment's history |
+| `/fusionner i123 i124` | merge an activity split in two, after confirmation |
 | `/note …` · `/notes` · `/oubli n` | facts the coach keeps in mind |
 | `/cout` · `/dernierenvoi` | what the model cost, what was sent |
 | a photo | a gym board, added to the day's session |
-| anything else | a question, answered with today's data |
+| anything else | a question, answered with the last two weeks; older days and trends are looked up in the archive |
 
 ## Modules
 
