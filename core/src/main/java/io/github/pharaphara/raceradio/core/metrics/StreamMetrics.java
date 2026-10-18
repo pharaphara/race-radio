@@ -22,7 +22,7 @@ import java.util.function.Function;
 public final class StreamMetrics {
 
     /** Bumped whenever a figure is added or its definition changes, so archived sessions are recomputed locally. */
-    public static final int VERSION = 1;
+    public static final int VERSION = 2;
 
     /** Best mean power windows, in seconds, by key. */
     public static final Map<String, Integer> POWER_WINDOWS = orderedOf(
@@ -33,9 +33,13 @@ public final class StreamMetrics {
     /** Endurance power band as a share of threshold power, for heart rate at a fixed effort. */
     static final double ENDURANCE_LOW = 0.65;
     static final double ENDURANCE_HIGH = 0.75;
-    /** Easy running band as a share of threshold speed, for stride and cadence at a fixed pace. */
-    static final double EASY_LOW = 0.75;
-    static final double EASY_HIGH = 0.85;
+    /**
+     * Easy running band as a share of threshold speed, for stride and cadence at a fixed pace. Wide
+     * enough to hold an ordinary easy run: 75 to 85 % left only three sessions out of a year.
+     */
+    static final double EASY_LOW = 0.72;
+    static final double EASY_HIGH = 0.90;
+    static final int MIN_EASY_SECONDS = 300;
     /** Heart rate lags at the start: the first minutes never count towards heart rate at a fixed effort. */
     static final int WARM_UP_SECONDS = 600;
     static final int MIN_BAND_SECONDS = 600;
@@ -78,8 +82,8 @@ public final class StreamMetrics {
                 double lo = EASY_LOW * thresholdSpeed;
                 double hi = EASY_HIGH * thresholdSpeed;
                 // Stride arrives in millimetres, cadence per leg: reported in metres and steps per minute.
-                streams.apply("step_length").ifPresent(s -> put(out, "stride_at_easy_pace", meanWhere(s, smooth, lo, hi) / 1000));
-                streams.apply("cadence").ifPresent(c -> put(out, "cadence_at_easy_pace", 2 * meanWhere(c, smooth, lo, hi)));
+                streams.apply("step_length").ifPresent(s -> put(out, "stride_at_easy_pace", meanWhere(s, smooth, lo, hi, MIN_EASY_SECONDS) / 1000));
+                streams.apply("cadence").ifPresent(c -> put(out, "cadence_at_easy_pace", 2 * meanWhere(c, smooth, lo, hi, MIN_EASY_SECONDS)));
             }
         } else if (SWIM.contains(sport)) {
             Optional<Samples> speed = streams.apply("velocity_smooth");
@@ -133,6 +137,11 @@ public final class StreamMetrics {
 
     /** Mean of {@code values} over the seconds where {@code band} lies within [low, high], after the warm-up. */
     static double meanWhere(Samples values, Samples band, double low, double high) {
+        return meanWhere(values, band, low, high, MIN_BAND_SECONDS);
+    }
+
+    /** Same, with its own minimum of seconds in the band. */
+    static double meanWhere(Samples values, Samples band, double low, double high, int minSeconds) {
         int n = Math.min(values.length(), band.length());
         double sum = 0;
         int count = 0;
@@ -144,7 +153,7 @@ public final class StreamMetrics {
                 count++;
             }
         }
-        return count >= MIN_BAND_SECONDS ? sum / count : Double.NaN;
+        return count >= minSeconds ? sum / count : Double.NaN;
     }
 
     private static double value(Samples s, int i) {

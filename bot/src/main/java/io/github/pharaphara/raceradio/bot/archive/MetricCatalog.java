@@ -76,7 +76,7 @@ public final class MetricCatalog {
     }
 
     public static final List<Metric> ALL = List.of(
-            new Metric("velo_efficacite", Group.BIKE, "efficacité aérobie (puissance pondérée par battement)", s("icu_efficiency_factor"),
+            new Metric("velo_efficacite", Group.BIKE, "efficacité aérobie, puissance pondérée par battement", s("icu_efficiency_factor"),
                     STEADY_BIKE, "sorties d'endurance (intensité 80 % ou moins, 30 min et plus)", Aggregate.MEDIAN, true,
                     num(2, "W/bpm"), List.of("efficacite", "ef", "w/bpm", "watt/bpm", "watts/bpm", "w par battement")),
             new Metric("velo_derive", Group.BIKE, "dérive cardiaque à vélo", s("decoupling"),
@@ -111,10 +111,10 @@ public final class MetricCatalog {
             new Metric("course_5km", Group.RUN, "meilleur 5 km", c("best_time_5km"), "1", "toutes les courses",
                     Aggregate.MIN, false, clock(""), List.of("5km", "5 km")),
             new Metric("course_foulee", Group.RUN, "longueur de foulée à allure facile", c("stride_at_easy_pace"), "1",
-                    "courses avec au moins 10 min à allure facile (75 à 85 % de la vitesse seuil)", Aggregate.MEDIAN, null,
+                    "courses avec au moins 5 min à allure facile (72 à 90 % de la vitesse seuil)", Aggregate.MEDIAN, null,
                     num(2, "m"), List.of("foulee", "longueur de foulee", "stride")),
             new Metric("course_cadence", Group.RUN, "cadence à allure facile", c("cadence_at_easy_pace"), "1",
-                    "courses avec au moins 10 min à allure facile", Aggregate.MEDIAN, true, num(0, "pas/min"),
+                    "courses avec au moins 5 min à allure facile", Aggregate.MEDIAN, true, num(0, "pas/min"),
                     List.of("cadence course", "cadence", "pas/min", "spm")),
             new Metric("course_ratio_vertical", Group.RUN, "ratio vertical", s("average_vertical_ratio"), EASY_RUN,
                     "footings", Aggregate.MEDIAN, false, num(1, "%"), List.of("ratio vertical", "oscillation")),
@@ -145,15 +145,26 @@ public final class MetricCatalog {
      * mention. Empty when nothing matches.
      */
     public static Optional<Metric> find(String words) {
-        String q = plain(words);
-        Group sport = q.contains("velo") || q.contains("vélo") ? Group.BIKE
-                : q.contains("course") || q.contains("cap") || q.contains("footing") ? Group.RUN
-                : q.contains("nage") || q.contains("natation") ? Group.SWIM : null;
+        String q = plain(words).strip();
+        for (Metric m : ALL) {
+            if (m.key().equals(q)) {
+                return Optional.of(m);
+            }
+        }
+        java.util.Set<String> tokens = java.util.Set.of(q.split("[\\s,;]+"));
+        Group sport = tokens.contains("velo") ? Group.BIKE
+                : tokens.contains("course") || tokens.contains("cap") || tokens.contains("footing") ? Group.RUN
+                : tokens.contains("nage") || tokens.contains("natation") ? Group.SWIM : null;
         Metric best = null;
         int bestScore = 0;
         for (Metric m : ALL) {
+            // A sport named restricts the search to it: "course efficacité" never lands on the bike.
+            if (sport != null && m.group() != sport && m.group() != Group.DAILY) {
+                continue;
+            }
             for (String w : m.words()) {
-                if (!(" " + q + " ").contains(" " + w + " ") && !q.contains(w)) {
+                // Every word of the alias, in any order: "course efficacité" matches "efficacite course".
+                if (!tokens.containsAll(java.util.List.of(w.split(" ")))) {
                     continue;
                 }
                 int score = w.length() * 2 + (m.group() == sport ? 1 : 0);
@@ -161,9 +172,6 @@ public final class MetricCatalog {
                     best = m;
                     bestScore = score;
                 }
-            }
-            if (m.key().equals(q.strip())) {
-                return Optional.of(m);
             }
         }
         return Optional.ofNullable(best);

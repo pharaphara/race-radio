@@ -140,7 +140,7 @@ public final class Trends {
             y[i] = r.months().get(i).value();
         }
         String sub = m.aggregate() == Trend.Aggregate.MEDIAN ? "valeur typique du mois (médiane)" : "meilleure valeur du mois";
-        var panel = Charts.Panel.of(capital(m.label()), List.of(new Charts.Series(m.label(), y, 0)), m.format()::apply).forSession().fullRange();
+        var panel = Charts.Panel.of("", List.of(new Charts.Series(m.label(), y, 0)), m.format()::apply).forSession().fullRange();
         String svg = Charts.panels(title, sub, x, i -> r.months().get((int) Math.round(i)).month().format(MONTH),
                 n <= 8 ? 1 : n <= 16 ? 2 : 3, List.of(panel), List.of(), Theme.DARK);
         return Png.of(svg, Charts.WIDTH, 2);
