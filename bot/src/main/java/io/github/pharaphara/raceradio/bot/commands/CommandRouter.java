@@ -43,6 +43,7 @@ public final class CommandRouter {
             /fusionner i123 i124 · recoller une séance coupée en deux (avec confirmation)
             /note j'ai mal au mollet gauche · un fait que le coach doit garder en tête
             /notes · les faits gardés · /oubli 3 · en retirer un
+            /tendance vélo efficacité 12 mois · une mesure dans le temps (/tendance seul : la liste)
             /cout · les appels au modèle ce mois-ci
             /dernierenvoi · ce qui a été envoyé au modèle la dernière fois
             /aide · cette liste
@@ -70,6 +71,7 @@ public final class CommandRouter {
     private final io.github.pharaphara.raceradio.bot.plan.Adapter adapter;
     private final io.github.pharaphara.raceradio.bot.merge.Merger merger;
     private final io.github.pharaphara.raceradio.bot.plan.SessionCreator sessions;
+    private final io.github.pharaphara.raceradio.bot.archive.Trends trends;
 
     public CommandRouter(TelegramClient telegram, long chatId, MorningCheck morning, FeelStore feels, DecisionLog decisions,
                          Ledger ledger, Journal journal, CoachModel model, Clock clock, ZoneId zone, boolean dryRun,
@@ -79,7 +81,9 @@ public final class CommandRouter {
                          io.github.pharaphara.raceradio.bot.plan.PlanCommands planCommands,
                          io.github.pharaphara.raceradio.bot.plan.Adapter adapter,
                          io.github.pharaphara.raceradio.bot.merge.Merger merger,
-                         io.github.pharaphara.raceradio.bot.plan.SessionCreator sessions) {
+                         io.github.pharaphara.raceradio.bot.plan.SessionCreator sessions,
+                         io.github.pharaphara.raceradio.bot.archive.Trends trends) {
+        this.trends = trends;
         this.sessions = sessions;
         this.merger = merger;
         this.adapter = adapter;
@@ -152,6 +156,9 @@ public final class CommandRouter {
         if (at > 0) {
             command = command.substring(0, at);
         }
+        if (command.startsWith("/")) {
+            sessions.stopAmending();
+        }
         String answer = switch (command) {
             case "/start", "/aide", "/help" -> HELP + (dryRun ? "\n\nMode sec : rien n'est écrit dans Intervals.icu." : "");
             case "/forme" -> form();
@@ -173,10 +180,24 @@ public final class CommandRouter {
                 merge(text);
                 yield null;
             }
+            case "/tendance", "/tendances" -> {
+                trends.handle(text);
+                yield null;
+            }
             case "/note" -> note(text);
             case "/notes" -> notes();
             case "/oubli" -> forget(text);
-            default -> command.startsWith("/") ? "Commande inconnue.\n\n" + HELP : conversation.answer(text);
+            default -> {
+                if (command.startsWith("/")) {
+                    yield "Commande inconnue.\n\n" + HELP;
+                }
+                if (sessions.amending()) {
+                    // The athlete pressed Modifier on a draft: this message is the change.
+                    sessions.amend(text);
+                    yield null;
+                }
+                yield conversation.answer(text);
+            }
         };
         if (answer == null) {
             return;

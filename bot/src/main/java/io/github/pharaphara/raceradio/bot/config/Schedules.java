@@ -29,13 +29,16 @@ public class Schedules implements SchedulingConfigurer {
     private final io.github.pharaphara.raceradio.bot.plan.Planner planner;
     private final io.github.pharaphara.raceradio.bot.store.Plans plans;
     private final io.github.pharaphara.raceradio.bot.plan.Adapter adapter;
+    private final io.github.pharaphara.raceradio.bot.archive.Archive archive;
 
     private final String once;
 
     public Schedules(RaceRadioProperties props, MorningCheck morning, TelegramClient telegram, Journal journal, ActivityWatcher watcher,
                      @org.springframework.beans.factory.annotation.Value("${race-radio.once:}") String once,
                      io.github.pharaphara.raceradio.bot.plan.Planner planner, io.github.pharaphara.raceradio.bot.store.Plans plans,
-                     io.github.pharaphara.raceradio.bot.plan.Adapter adapter) {
+                     io.github.pharaphara.raceradio.bot.plan.Adapter adapter,
+                     io.github.pharaphara.raceradio.bot.archive.Archive archive) {
+        this.archive = archive;
         this.adapter = adapter;
         this.planner = planner;
         this.plans = plans;
@@ -58,9 +61,14 @@ public class Schedules implements SchedulingConfigurer {
         registrar.addCronTask(new CronTask(this::sundayEvening, new CronTrigger("0 0 19 * * SUN", props.zone())));
         // The watcher checks its own daytime window; outside it a poll costs nothing.
         registrar.addFixedDelayTask(this::watch, java.time.Duration.ofMinutes(props.schedule().watchEveryMinutes()));
+        // The local archive: a year of history once, in the background, then the last month every night.
+        registrar.addCronTask(new CronTask(() -> archive.refresh(30), daily(LocalTime.of(3, 45))));
+        Thread.ofVirtual().name("archive-backfill").start(archive::backfill);
     }
 
     void morningCall() {
+        // Last night's figures into the archive, so the conversation can quote them all day.
+        archive.refresh(3);
         try {
             MorningCheck.Outcome o = morning.run(true);
             java.util.Optional<io.github.pharaphara.raceradio.bot.plan.Adapter.Result> adjusted = java.util.Optional.empty();
@@ -91,6 +99,8 @@ public class Schedules implements SchedulingConfigurer {
             int n = watcher.poll();
             if (n > 0) {
                 LOG.info("{} session(s) reviewed", n);
+                // The review just cached the streams: archiving the new session costs two list calls.
+                archive.refresh(3);
             }
         } catch (RuntimeException e) {
             LOG.warn("looking for new activities failed: {}", e.getMessage());

@@ -61,9 +61,17 @@ public final class SessionReview {
     private final DecisionLog decisions;
     private final String effort;
     private final Clock clock;
+    private final java.util.function.Function<String, ActivityStreams> streams;
 
     public SessionReview(IntervalsClient intervals, IntervalsWriter writer, CoachModel model, DecisionLog decisions,
                          String effort, Clock clock) {
+        this(intervals, writer, model, decisions, effort, clock, intervals::streams);
+    }
+
+    /** @param streams  where an activity's streams come from: the local cache first, in service */
+    public SessionReview(IntervalsClient intervals, IntervalsWriter writer, CoachModel model, DecisionLog decisions,
+                         String effort, Clock clock, java.util.function.Function<String, ActivityStreams> streams) {
+        this.streams = streams;
         this.intervals = intervals;
         this.writer = writer;
         this.model = model;
@@ -118,7 +126,7 @@ public final class SessionReview {
 
     Computed compute(ActivitySummary a) {
         Optional<SportSettings> settings = intervals.athlete().settingsFor(a.type());
-        ActivityStreams streams = intervals.streams(a.id());
+        ActivityStreams streams = this.streams.apply(a.id());
         Optional<EffortSignal> signal = EffortSignal.of(a.type(), streams, settings);
         Double hrMean = streams.get("heartrate").map(Samples::mean).filter(v -> !v.isNaN()).orElse(null);
         if (signal.isEmpty()) {

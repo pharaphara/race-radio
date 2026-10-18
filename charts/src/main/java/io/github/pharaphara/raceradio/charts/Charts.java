@@ -18,6 +18,8 @@ public final class Charts {
     static final double LEFT = 54;
     static final double RIGHT = 58;
     static final double TITLE = 52;
+    /** Series up to this many points get a marker on every value. */
+    static final int MARKED_POINTS = 40;
     static final double PANEL = 150;
     static final double PANEL_GAP = 34;
     static final double AXIS = 26;
@@ -160,6 +162,15 @@ public final class Charts {
                     py[i] = Double.isNaN(pts[1][i]) ? Double.NaN : sy.at(Math.max(sy.min(), Math.min(sy.max(), pts[1][i])));
                 }
                 svg.path(px, py, t.slot(s.slot()));
+                if (px.length <= MARKED_POINTS) {
+                    // A short series, such as one value per month: a lone value between two gaps
+                    // would draw no line at all, so every value gets its marker.
+                    for (int i = 0; i < px.length; i++) {
+                        if (!Double.isNaN(py[i])) {
+                            svg.circle(px[i], py[i], 4, t.slot(s.slot()), t.surface());
+                        }
+                    }
+                }
                 int last = lastPresent(py);
                 if (last >= 0 && panel.endLabels() && panel.series().size() <= 4) {
                     svg.circle(px[last], py[last], 4, t.slot(s.slot()), t.surface());

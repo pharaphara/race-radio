@@ -93,3 +93,30 @@ CREATE TABLE IF NOT EXISTS adaptation (
     replacement_id   INTEGER,
     undone           INTEGER NOT NULL DEFAULT 0
 );
+
+-- The local archive. Activities and wellness days are kept exactly as Intervals.icu sends them,
+-- every field, so any figure over any period is a local query and never a new call.
+CREATE TABLE IF NOT EXISTS archive_activity (
+    id                TEXT PRIMARY KEY,
+    day               TEXT NOT NULL,
+    type              TEXT NOT NULL,
+    json              TEXT NOT NULL,
+    fetched_at        TEXT NOT NULL,
+    -- StreamMetrics.VERSION the computed figures were made with, 0 until computed.
+    computed_version  INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS archive_activity_day ON archive_activity (day);
+
+CREATE TABLE IF NOT EXISTS archive_wellness (
+    day         TEXT PRIMARY KEY,
+    json        TEXT NOT NULL,
+    fetched_at  TEXT NOT NULL
+);
+
+-- Only the figures Intervals.icu does not provide, computed once from the archived streams.
+CREATE TABLE IF NOT EXISTS computed_metric (
+    activity_id  TEXT NOT NULL,
+    metric       TEXT NOT NULL,
+    value        REAL NOT NULL,
+    PRIMARY KEY (activity_id, metric)
+);

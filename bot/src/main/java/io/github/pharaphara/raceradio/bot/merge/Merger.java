@@ -27,10 +27,17 @@ public final class Merger {
 
     private final IntervalsClient intervals;
     private final IntervalsWriter writer;
+    private final java.util.function.Consumer<String> changed;
 
     public Merger(IntervalsClient intervals, IntervalsWriter writer) {
+        this(intervals, writer, id -> { });
+    }
+
+    /** @param changed  told which activities a merge rewrote, so local copies are dropped */
+    public Merger(IntervalsClient intervals, IntervalsWriter writer, java.util.function.Consumer<String> changed) {
         this.intervals = intervals;
         this.writer = writer;
+        this.changed = changed;
     }
 
     public Preview preview(String idA, String idB) {
@@ -65,6 +72,10 @@ public final class Merger {
                 columns(intervals.streams(p.second().id())), between);
         writer.replaceStreams(p.first().id(), joined);
         writer.deleteMergedActivity(p.second().id(), p.first().id());
+        if (writer.mode() != IntervalsWriter.Mode.DRY_RUN) {
+            changed.accept(p.first().id());
+            changed.accept(p.second().id());
+        }
         return writer.mode() == IntervalsWriter.Mode.DRY_RUN
                 ? "Mode sec : la fusion a été préparée mais rien n'a été écrit."
                 : "Fusionnées : « " + p.first().name() + " » contient maintenant les deux parties.";

@@ -79,7 +79,7 @@ class ConversationTest {
             @Override
             public ModelReply send(ModelRequest request, SystemPrompt system) {
                 prompts.add(request.userContent());
-                return new ModelReply("Repos ce soir, ça vaut mieux.", "claude-sonnet-5-5", "end_turn", false, Usage.NONE, 1, 0.01);
+                return new ModelReply(modelReply, "claude-sonnet-5-5", "end_turn", false, Usage.NONE, 1, 0.01);
             }
 
             @Override
@@ -91,7 +91,54 @@ class ConversationTest {
                 new Pricing(Map.<String, RaceRadioProperties.Prices>of()), "claude-sonnet-5-5", true, new BigDecimal(budget), CLOCK, PARIS);
         MorningCheck morning = new MorningCheck(icu, new IntervalsWriter(icu, IntervalsWriter.Mode.DRY_RUN, s -> { }), model,
                 new FeelStore(jdbc), new DecisionLog(jdbc), Temperament.COMMITTED, "low", CLOCK);
-        return new Conversation(model, morning, new DecisionLog(jdbc), new Conversations(jdbc), CLOCK);
+        return new Conversation(model, morning, new DecisionLog(jdbc), new Conversations(jdbc), CLOCK, history);
+    }
+
+    private String modelReply = "Repos ce soir, ça vaut mieux.";
+    private final List<String> trendsSent = new ArrayList<>();
+    private History history = new History() {
+        @Override
+        public List<String> recentDays(int days) {
+            return List.of("2026-10-16 VFC 30 ms, FC de repos 53");
+        }
+
+        @Override
+        public List<String> recentSessions(int days) {
+            return List.of();
+        }
+
+        @Override
+        public java.util.Optional<String> day(LocalDate day) {
+            return day.equals(LocalDate.of(2026, 9, 12)) ? java.util.Optional.of("Samedi 12 septembre 2026\nMatin : VFC 52 ms")
+                    : java.util.Optional.empty();
+        }
+
+        @Override
+        public boolean trend(String metricKey, int months) {
+            trendsSent.add(metricKey + " " + months);
+            return metricKey.equals("velo_efficacite");
+        }
+
+        @Override
+        public List<String> metrics() {
+            return List.of("velo_efficacite: efficacité aérobie");
+        }
+    };
+
+    @Test
+    void recentMorningsAreInTheContextAndOlderQuestionsAreAnsweredByTheProgram() {
+        Conversation c = conversation();
+        c.answer("Ma VFC d'hier soir ?");
+        assertThat(prompts.getLast()).contains("VFC 30 ms").contains("velo_efficacite: efficacité aérobie");
+
+        modelReply = "JOUR 2026-09-12";
+        assertThat(c.answer("Et le 12 septembre ?")).isEqualTo("Samedi 12 septembre 2026\nMatin : VFC 52 ms");
+        modelReply = "JOUR 2026-01-01";
+        assertThat(c.answer("Et le 1er janvier ?")).contains("rien dans mon archive");
+
+        modelReply = "TENDANCE velo_efficacite 12";
+        assertThat(c.answer("Mon W/bpm sur un an ?")).isNull();
+        assertThat(trendsSent).containsExactly("velo_efficacite 12");
     }
 
     @Test
