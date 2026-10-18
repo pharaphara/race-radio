@@ -87,6 +87,44 @@ class StravaHarvestTest {
     }
 
     @Test
+    void theFirstListingGoesToTheLastPageEvenWhenTheQuotaCutsItBetweenRuns() {
+        JdbcTemplate jdbc = TestDb.in(dir);
+        List<String> pages = new ArrayList<>();
+        int[] budget = {1};
+        StravaClient pager = new StravaClient("1", "s", "r", jdbc, Clock.systemUTC()) {
+            @Override
+            public JsonNode get(String path) {
+                if (budget[0]-- <= 0) {
+                    throw new QuotaReached(Instant.EPOCH);
+                }
+                pages.add(path);
+                int page = Integer.parseInt(path.substring(path.indexOf("page=", path.indexOf("per_page") + 9) + 5));
+                // Two full pages of one activity, then an empty one.
+                return JSON.readTree(page > 2 ? "[]" : "[{\"id\":" + page + ",\"start_date_local\":\"2026-01-0" + page + "T09:00:00Z\",\"sport_type\":\"Run\"}]");
+            }
+
+            @Override
+            public boolean configured() {
+                return true;
+            }
+        };
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> new StravaHarvest(pager, jdbc, Clock.systemUTC(), 1).listActivities())
+                .isInstanceOf(StravaClient.QuotaReached.class);
+        assertThat(pages).containsExactly("athlete/activities?per_page=1&page=1");
+
+        budget[0] = 10;
+        new StravaHarvest(pager, jdbc, Clock.systemUTC(), 1).listActivities();
+        assertThat(pages).endsWith("athlete/activities?per_page=1&page=2", "athlete/activities?per_page=1&page=3");
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM strava_activity", Integer.class)).isEqualTo(2);
+
+        // Listed once to the end: next time, the first page without anything new is enough.
+        budget[0] = 10;
+        pages.clear();
+        new StravaHarvest(pager, jdbc, Clock.systemUTC(), 1).listActivities();
+        assertThat(pages).containsExactly("athlete/activities?per_page=1&page=1");
+    }
+
+    @Test
     void aSegmentsHistoryNamesTheRecordAndTheGapOfTheLastPassage() {
         String text = Segments.history("Gorges de la Jonte", List.of(
                 new Segments.Effort(LocalDate.of(2026, 7, 25), 1176, 260.0, 165.0),

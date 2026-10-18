@@ -3,7 +3,9 @@ spring:
   application:
     name: race-radio
   datasource:
-    url: jdbc:sqlite:${race-radio.data-dir}/race-radio.db
+    # WAL lets readers go on while one task writes; busy_timeout makes a second writer wait instead of
+    # failing with SQLITE_BUSY (the archive refresh and the Strava harvest both write at start).
+    url: jdbc:sqlite:${race-radio.data-dir}/race-radio.db?journal_mode=WAL&busy_timeout=30000
     driver-class-name: org.sqlite.JDBC
   sql:
     init:
