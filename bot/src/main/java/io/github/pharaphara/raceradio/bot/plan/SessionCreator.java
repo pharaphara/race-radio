@@ -1,9 +1,12 @@
 package io.github.pharaphara.raceradio.bot.plan;
 
+import io.github.pharaphara.raceradio.bot.archive.Archive;
 import io.github.pharaphara.raceradio.bot.llm.CoachModel;
 import io.github.pharaphara.raceradio.bot.llm.ModelReply;
 import io.github.pharaphara.raceradio.bot.llm.PromptFence;
 import io.github.pharaphara.raceradio.bot.llm.Purpose;
+import io.github.pharaphara.raceradio.bot.store.DecisionLog;
+import io.github.pharaphara.raceradio.bot.store.Plans;
 import io.github.pharaphara.raceradio.bot.telegram.TelegramClient;
 import io.github.pharaphara.raceradio.core.plan.Thresholds;
 import io.github.pharaphara.raceradio.core.workout.Draft;
@@ -14,6 +17,7 @@ import io.github.pharaphara.raceradio.icu.model.CalendarEvent;
 import io.github.pharaphara.raceradio.icu.workout.WorkoutText;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.time.Clock;
@@ -33,13 +37,15 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * One workout on demand, outside any programme: {@code /seance demain 3x10min à 280W}.
+ * One workout on demand, outside any programme: {@code /seance demain cap facile}, or as precise as
+ * {@code /seance demain 3x10min à 280W}.
  *
- * <p>The model only translates the request into a {@link Draft}, with intensities as a share of
- * threshold power or an offset from threshold pace, as the athlete said them. The arithmetic and the
- * bounds are {@link Draft#build}'s, the syntax is {@link WorkoutText}'s, and nothing is published
- * before the athlete has seen the workout and pressed Publier. Once published, it can be taken
- * back with one button, like anything else the coach writes.
+ * <p>The coach takes the initiative: a vague request gets a complete workout, calibrated on what is
+ * known locally (the morning verdict, the day's availability, the last two weeks in the archive),
+ * with one sentence saying why. The athlete then publishes it, asks for a change in plain words, or
+ * drops it. The model only translates into a {@link Draft}; the arithmetic and the bounds are
+ * {@link Draft#build}'s, the syntax is {@link WorkoutText}'s, and nothing is published before the
+ * athlete has seen the workout and pressed Publier.
  */
 public final class SessionCreator {
 
@@ -53,39 +59,86 @@ public final class SessionCreator {
             Map.entry("dim", DayOfWeek.SUNDAY));
     private static final Pattern DAY_WORD = Pattern.compile(
             "(?i)^(aujourd'hui|aujourdhui|auj|demain|après-demain|apres-demain|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|lun|mar|mer|jeu|ven|sam|dim|\\d{4}-\\d{2}-\\d{2}|\\d{1,2}/\\d{1,2})\\b\\s*");
+    private static final Map<String, String> VERDICTS = Map.of("GREEN", "vert, entraînement prévu", "YELLOW", "orange, version allégée",
+            "RED", "rouge, repos ou récupération active");
+    /** Days of history given to the model to calibrate a workout. */
+    static final int RECENT_DAYS = 14;
 
-    /** A draft waiting for the athlete's decision. Lost on restart, which only means asking again. */
-    public record Pending(LocalDate day, Workout workout) {
-    }
-
-    private final CoachModel model;
-    private final Planner planner;
-    private final IntervalsClient intervals;
-    private final IntervalsWriter writer;
-    private final TelegramClient telegram;
-    private final long chatId;
-    private final Clock clock;
-    private final Map<Long, Pending> pending = new ConcurrentHashMap<>();
-    private final AtomicLong ids = new AtomicLong();
-
-    public SessionCreator(CoachModel model, Planner planner, IntervalsClient intervals, IntervalsWriter writer,
-                          TelegramClient telegram, long chatId, Clock clock) {
-        this.model = model;
-        this.planner = planner;
-        this.intervals = intervals;
-        this.writer = writer;
-        this.telegram = telegram;
-        this.chatId = chatId;
-        this.clock = clock;
+    /**
+     * A draft waiting for the athlete's decision. Lost on restart, which only means asking again.
+     *
+     * @param draftJson  the draft as the model wrote it, to amend it without starting over
+     */
+    public record Pending(LocalDate day, Workout workout, String request, String draftJson) {
     }
 
     /** What a request gave: a workout to show, or only a message (help, question, refusal). */
     public record Prepared(String message, Pending pending) {
     }
 
-    /** Handles {@code /seance ...}: drafts, then shows the workout with Publier and Annuler. */
+    private final CoachModel model;
+    private final Planner planner;
+    private final IntervalsClient intervals;
+    private final IntervalsWriter writer;
+    private final Plans plans;
+    private final DecisionLog decisions;
+    private final Archive archive;
+    private final TelegramClient telegram;
+    private final long chatId;
+    private final Clock clock;
+    private final Map<Long, Pending> pending = new ConcurrentHashMap<>();
+    private final AtomicLong ids = new AtomicLong();
+    /** The draft the athlete pressed Modifier on: their next plain message is the change. */
+    private volatile Long amending;
+
+    public SessionCreator(CoachModel model, Planner planner, IntervalsClient intervals, IntervalsWriter writer,
+                          Plans plans, DecisionLog decisions, Archive archive,
+                          TelegramClient telegram, long chatId, Clock clock) {
+        this.model = model;
+        this.planner = planner;
+        this.intervals = intervals;
+        this.writer = writer;
+        this.plans = plans;
+        this.decisions = decisions;
+        this.archive = archive;
+        this.telegram = telegram;
+        this.chatId = chatId;
+        this.clock = clock;
+    }
+
+    /** Handles {@code /seance ...}: drafts, then shows the workout with its buttons. */
     public void draft(String text) {
-        Prepared p = prepare(text);
+        amending = null;
+        show(prepare(text));
+    }
+
+    /** True while the athlete is expected to say what to change in a draft. */
+    public boolean amending() {
+        return amending != null;
+    }
+
+    /** Any command ends the wait for a change. */
+    public void stopAmending() {
+        amending = null;
+    }
+
+    /** The athlete's change to the draft they pressed Modifier on. */
+    public void amend(String change) {
+        Long id = amending;
+        amending = null;
+        Pending p = id == null ? null : pending.get(id);
+        if (p == null) {
+            telegram.send(chatId, "Ce brouillon n'existe plus. Redemande la séance avec /seance.");
+            return;
+        }
+        Prepared next = draftFor(p.day(), p.request(), p.draftJson(), change);
+        if (next.pending() != null) {
+            pending.remove(id);
+        }
+        show(next);
+    }
+
+    private void show(Prepared p) {
         if (p.pending() == null) {
             telegram.send(chatId, p.message());
             return;
@@ -94,6 +147,7 @@ public final class SessionCreator {
         pending.put(id, p.pending());
         Map<String, String> buttons = new LinkedHashMap<>();
         buttons.put("Publier", "pub:" + id);
+        buttons.put("Modifier", "edit:" + id);
         buttons.put("Annuler", "drop:" + id);
         telegram.sendWithButtons(chatId, p.message(), buttons);
     }
@@ -103,11 +157,12 @@ public final class SessionCreator {
         String rest = text.replaceFirst("(?i)^/s[eé]ance(@\\S+)?\\s*", "").strip();
         if (rest.isEmpty()) {
             return new Prepared("""
-                    Décris la séance, avec le jour si ce n'est pas aujourd'hui :
-                    /seance demain vélo 3x10min à 280W, récup 5 min
-                    /seance samedi course 1h15 facile avec 6 lignes droites
-                    /seance mer natation technique 45 min
-                    Je te montre la séance avant de la publier.""", null);
+                    Dis-moi quoi et quand, je m'occupe du reste :
+                    /seance demain cap facile
+                    /seance jeudi une VO2 à vélo
+                    /seance samedi sortie longue 2h30
+                    /seance demain vélo 3x10min à 280W
+                    Je te propose une séance calibrée, tu la publies, la modifies ou l'annules.""", null);
         }
         LocalDate today = LocalDate.now(clock);
         LocalDate day;
@@ -126,12 +181,18 @@ public final class SessionCreator {
             return new Prepared("Ce jour est passé.", null);
         }
         if (rest.isEmpty()) {
-            return new Prepared("Et quelle séance ? Par exemple : /seance demain vélo 1h endurance", null);
+            return new Prepared("Et quelle séance ? Par exemple : /seance demain cap facile", null);
         }
+        return draftFor(day, rest, null, null);
+    }
+
+    private Prepared draftFor(LocalDate day, String request, String previousDraft, String change) {
         Thresholds t = planner.thresholds();
         Workout w;
+        String why;
+        String draftJson;
         try {
-            ModelReply r = model.ask(Purpose.SESSION, "low", 2_000, prompt(rest, t));
+            ModelReply r = model.ask(Purpose.SESSION, "low", 2_500, prompt(day, request, t, context(day), previousDraft, change));
             String answer = r.text().strip();
             if (r.refused() || answer.isEmpty()) {
                 return new Prepared("Je n'ai pas pu préparer cette séance.", null);
@@ -139,7 +200,11 @@ public final class SessionCreator {
             if (answer.startsWith(QUESTION)) {
                 return new Prepared(answer.substring(QUESTION.length()).strip(), null);
             }
-            w = buildable(JSON.readValue(json(answer), Draft.class).build(t));
+            JsonNode root = JSON.readTree(json(answer));
+            JsonNode workout = root.has("workout") ? root.path("workout") : root;
+            why = root.path("why").isString() ? root.path("why").asString().strip() : "";
+            draftJson = workout.toString();
+            w = buildable(JSON.treeToValue(workout, Draft.class).build(t));
         } catch (CoachModel.BudgetExhausted e) {
             return new Prepared("Le budget du modèle est atteint ce mois-ci : je ne peux pas préparer de séance.", null);
         } catch (IllegalArgumentException e) {
@@ -149,12 +214,32 @@ public final class SessionCreator {
             LOG.warn("drafting a workout failed: {}", e.toString());
             return new Prepared("Je n'ai pas réussi à préparer cette séance. Reformule-la plus simplement.", null);
         }
-        return new Prepared(preview(day, w, t, alreadyPlanned(day)), new Pending(day, w));
+        return new Prepared(preview(day, w, t, why, alreadyPlanned(day)), new Pending(day, w, request, draftJson));
+    }
+
+    /** What a coach would look at before prescribing, all of it local. */
+    String context(LocalDate day) {
+        StringBuilder b = new StringBuilder();
+        LocalDate today = LocalDate.now(clock);
+        decisions.latestOf("MORNING").filter(d -> d.day().equals(today.toString())).ifPresent(d ->
+                b.append("Morning verdict today (").append(today).append("): ").append(VERDICTS.getOrDefault(d.verdict(), d.verdict())).append('\n'));
+        Integer minutes = plans.availability().get(day.getDayOfWeek());
+        if (minutes != null) {
+            b.append("Time available that day: ").append(minutes).append(" min\n");
+        }
+        try {
+            List<String> recent = archive.recent(RECENT_DAYS);
+            b.append("Sessions of the last ").append(RECENT_DAYS).append(" days:\n")
+                    .append(recent.isEmpty() ? "none recorded\n" : String.join("\n", recent) + "\n");
+        } catch (RuntimeException e) {
+            b.append("Recent sessions: unavailable\n");
+        }
+        return b.toString();
     }
 
     /** True for the buttons this class put under its messages. */
     public boolean handles(String data) {
-        return data.startsWith("pub:") || data.startsWith("drop:") || data.startsWith("del:");
+        return data.startsWith("pub:") || data.startsWith("drop:") || data.startsWith("del:") || data.startsWith("edit:");
     }
 
     public void callback(String data) {
@@ -166,8 +251,22 @@ public final class SessionCreator {
             return;
         }
         switch (parts[0]) {
-            case "drop" -> telegram.send(chatId, pending.remove(id) == null ? "Déjà traité." : "Séance abandonnée, rien n'a été publié.");
-            case "pub" -> publish(id);
+            case "drop" -> {
+                amending = null;
+                telegram.send(chatId, pending.remove(id) == null ? "Déjà traité." : "Séance abandonnée, rien n'a été publié.");
+            }
+            case "pub" -> {
+                amending = null;
+                publish(id);
+            }
+            case "edit" -> {
+                if (!pending.containsKey(id)) {
+                    telegram.send(chatId, "Ce brouillon n'existe plus. Redemande la séance avec /seance.");
+                    return;
+                }
+                amending = id;
+                telegram.send(chatId, "Qu'est-ce que je change ? Par exemple : plus court, 6 répétitions, plutôt en côte, à vélo plutôt qu'à pied.");
+            }
             case "del" -> {
                 try {
                     writer.deleteOwnEvent(id);
@@ -231,11 +330,12 @@ public final class SessionCreator {
         }
     }
 
-    static String preview(LocalDate day, Workout w, Thresholds t, String alreadyPlanned) {
+    static String preview(LocalDate day, Workout w, Thresholds t, String why, String alreadyPlanned) {
         int seconds = Draft.seconds(w, t);
         String length = seconds >= 3600 ? seconds / 3600 + "h" + String.format("%02d", seconds % 3600 / 60) : Math.round(seconds / 60.0) + " min";
-        return "« " + w.name() + " » · " + sportName(w.sport()) + " · " + length + " · " + DAY.format(day) + "\n\n"
-                + WorkoutText.render(w) + "\n" + alreadyPlanned + "\n\nJe la publie ?";
+        return "« " + w.name() + " » · " + sportName(w.sport()) + " · " + length + " · " + DAY.format(day) + "\n"
+                + (why == null || why.isBlank() ? "" : why + "\n") + "\n"
+                + WorkoutText.render(w) + "\n" + alreadyPlanned + "\n\nÇa te va ?";
     }
 
     private static String sportName(String sport) {
@@ -282,21 +382,22 @@ public final class SessionCreator {
         return answer.substring(from, to + 1);
     }
 
-    static String prompt(String request, Thresholds t) {
-        return """
-                Task: turn the athlete's request into one workout, as JSON and nothing else. Do not compute
-                watts or paces: express intensities the way below, the service does the arithmetic.
+    static String prompt(LocalDate day, String request, Thresholds t, String context, String previousDraft, String change) {
+        String base = """
+                Task: prescribe one workout for %s, as a coach who takes the initiative. Answer with JSON
+                and nothing else. Do not compute watts or paces: express intensities as below, the service
+                does the arithmetic.
 
-                Athlete's thresholds (for your judgement only): threshold power %s, threshold pace %s,
-                critical swim speed %s.
+                Athlete's thresholds: threshold power %s, threshold pace %s, critical swim speed %s.
 
                 JSON shape:
-                {"sport": "Ride" | "VirtualRide" | "Run" | "TrailRun" | "Swim",
-                 "name": "short French title, no digits",
-                 "sections": [{"title": "Warmup" | "Main Set" | "Cooldown" | "Drills",
-                               "repeats": 1,
-                               "steps": [{"seconds": 600, "metres": null, "kind": "...", "low": 0, "high": null,
-                                          "cadence": null, "cue": ""}]}]}
+                {"why": "one or two French sentences: the choice and what it rests on",
+                 "workout": {"sport": "Ride" | "VirtualRide" | "Run" | "TrailRun" | "Swim",
+                   "name": "short French title, no digits",
+                   "sections": [{"title": "Warmup" | "Main Set" | "Cooldown" | "Drills",
+                                 "repeats": 1,
+                                 "steps": [{"seconds": 600, "metres": null, "kind": "...", "low": 0, "high": null,
+                                            "cadence": null, "cue": ""}]}]}}
 
                 kind, with low and high:
                 - THRESHOLD_POWER_PERCENT: percent of threshold power (bike), e.g. 88 and 94
@@ -307,27 +408,44 @@ public final class SessionCreator {
                   swim speed per 100 m in the water; negative is faster. For a range, low is the faster end.
                 - PACE: absolute seconds per km (run) or per 100 m (swim), only when the athlete gave a pace
 
-                Rules:
-                - Follow the request exactly: its sport, durations, repetitions and intensities. When the
-                  athlete gives numbers, use them as given (WATTS, PACE).
-                - When the athlete names an intensity without a number, bike in percent of threshold power:
-                  recovery 45-55, endurance 56-75, tempo 76-87, sweet spot 88-94, threshold 95-105,
-                  VO2max 106-120, anaerobic 121-150. Run as offsets from threshold pace: easy +50 to +70,
-                  steady +25 to +40, tempo +10 to +20, threshold -5 to +5, VO2max -15 to -25.
-                  Swim as offsets from critical swim speed: recovery +15 to +20, aerobic +8 to +12,
-                  tempo +3 to +6, threshold 0, VO2max -3 to -5.
-                - Unless the request says otherwise, add a warm-up (10-15 min) and a cool-down (5-10 min)
-                  around any hard work, and keep the total to the duration asked.
+                How to prescribe:
+                - Whatever the athlete specified (sport, duration, repetitions, numbers) is kept exactly.
+                  Everything left open, you decide: a complete, ready-to-ride workout, never a question
+                  when a sensible choice exists. "cap" and "footing" mean running.
+                - Duration when not given: the time available that day if known, otherwise easy 45-60 min,
+                  quality sessions 50-70 min including warm-up and cool-down, long sessions 1h30-2h30.
+                - Intensities by name. Bike, percent of threshold power: recovery 45-55, endurance 56-75,
+                  tempo 76-87, sweet spot 88-94, threshold 95-105, VO2max 106-120, anaerobic 121-150.
+                  Run, offsets from threshold pace: easy +50 to +70, steady +25 to +40, tempo +10 to +20,
+                  threshold -5 to +5, VO2max -15 to -25. Swim, offsets from critical swim speed: recovery
+                  +15 to +20, aerobic +8 to +12, tempo +3 to +6, threshold 0, VO2max -3 to -5.
+                - Usual formats. VO2max: 4 to 6 x 3 to 4 min with equal or slightly shorter recovery
+                  (bike: 5 x 4 min at 106-115 with 3-4 min easy; run: 5 x 3 min or 6 x 800 m with
+                  jogged recovery). Threshold: 3 x 8-12 min or 2 x 15-20 min, recovery a third to half
+                  of the work. Sweet spot: 2 x 15-20 min or 3 x 12-15 min. Easy run: steady in the easy
+                  band, optionally 4-6 strides of 15-20 s near VO2max pace with full recovery at the end.
+                  Swim: drills first, then the main set in metres. Always a warm-up of 10-15 min (or
+                  200-400 m) and a cool-down of 5-10 min around hard work.
+                - Calibrate on the context below: a red verdict for that day means easy only, whatever
+                  was asked, and say so in "why"; orange trims volume, not intent; a hard session in the
+                  last 48 hours shortens or softens a new hard one. Name the basis in "why" (verdict,
+                  recent load, last hard session) and never invent a number the context does not hold.
                 - A repeated block is one section with "repeats" greater than 1, holding the work step and
-                  its recovery.
-                - seconds or metres, never both. Swim sets in metres. cadence in rpm, bike only, or null.
-                - cue: at most a few French words, no digits, no units, no symbols; empty is fine.
-                - If the request is not a workout, or the sport cannot be guessed, answer instead one line
-                  starting with QUESTION: followed by a short question in French.
+                  its recovery. seconds or metres, never both; swim sets in metres. cadence in rpm, bike
+                  only, or null. cue: a few French words, no digits, no units, no symbols; empty is fine.
+                - Only if the request is not about a workout at all, answer one line starting with
+                  QUESTION: followed by a short question in French.
 
-                """.formatted(t.thresholdPower() == null ? "unknown" : t.thresholdPower() + " W",
+                """.formatted(day + " (" + DAY.format(day) + ")",
+                t.thresholdPower() == null ? "unknown" : t.thresholdPower() + " W",
                 t.thresholdPace() == null ? "unknown" : t.thresholdPace() / 60 + ":" + String.format("%02d", t.thresholdPace() % 60) + "/km",
-                t.criticalSwimPace() == null ? "unknown" : t.criticalSwimPace() / 60 + ":" + String.format("%02d", t.criticalSwimPace() % 60) + "/100m")
-                + PromptFence.data("request", request);
+                t.criticalSwimPace() == null ? "unknown" : t.criticalSwimPace() / 60 + ":" + String.format("%02d", t.criticalSwimPace() % 60) + "/100m");
+        String out = base + PromptFence.data("race-radio.context", context) + "\n" + PromptFence.data("request", request);
+        if (previousDraft != null) {
+            out += "\nYou proposed this workout:\n" + PromptFence.data("race-radio.previous-draft", previousDraft)
+                    + "\nThe athlete asks for this change. Apply it, keep the rest, and say in \"why\" what changed:\n"
+                    + PromptFence.data("change", change);
+        }
+        return out;
     }
 }

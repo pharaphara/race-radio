@@ -72,6 +72,21 @@ public class IntervalsClient {
         return get(athletePath("activities?oldest=" + from + "&newest=" + to), new TypeReference<>() { });
     }
 
+    /** Activities exactly as Intervals.icu sends them, every field kept, for the local archive. */
+    public List<JsonNode> activitiesRaw(LocalDate from, LocalDate to) {
+        return get(athletePath("activities?oldest=" + from + "&newest=" + to), new TypeReference<>() { });
+    }
+
+    /** Wellness days exactly as Intervals.icu sends them, for the local archive. */
+    public List<JsonNode> wellnessRaw(LocalDate from, LocalDate to) {
+        return get(athletePath("wellness?oldest=" + from + "&newest=" + to), new TypeReference<>() { });
+    }
+
+    /** The CSV export of an activity's streams, as sent, so it can be kept and parsed again later. */
+    public String streamsCsv(String activityId) {
+        return send(request("activity/" + activityId + "/streams.csv"));
+    }
+
     public List<CalendarEvent> events(LocalDate from, LocalDate to) {
         return get(athletePath("events?oldest=" + from + "&newest=" + to), new TypeReference<>() { });
     }
@@ -98,8 +113,8 @@ public class IntervalsClient {
         return parseStreamsCsv(send(request("activity/" + activityId + "/streams.csv")));
     }
 
-    /** Package-visible so the parser can be tested without a network. */
-    static ActivityStreams parseStreamsCsv(String csv) {
+    /** Parses a streams CSV, fetched now or kept from an earlier fetch. */
+    public static ActivityStreams parseStreamsCsv(String csv) {
         List<String> lines = csv.lines().filter(l -> !l.isBlank()).toList();
         if (lines.isEmpty()) {
             return new ActivityStreams(Map.of());

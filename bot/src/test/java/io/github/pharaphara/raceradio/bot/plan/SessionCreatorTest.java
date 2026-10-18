@@ -42,9 +42,22 @@ class SessionCreatorTest {
         Workout w = SessionCreator.buildable(d.build(T));
         // The cue with a digit would be read as an instruction by the calendar: cues are dropped.
         assertThat(w.flatten()).allMatch(s -> s.cue().isEmpty());
-        String preview = SessionCreator.preview(TODAY.plusDays(1), w, T, "");
+        String preview = SessionCreator.preview(TODAY.plusDays(1), w, T, "Trois blocs au seuil, tu es frais.", "");
         assertThat(preview).contains("« Seuil » · vélo · 1h00 · dimanche 18 octobre")
-                .contains("Main Set 3x").contains("280w").contains("Je la publie ?");
+                .contains("Trois blocs au seuil, tu es frais.")
+                .contains("Main Set 3x").contains("280w").contains("Ça te va ?");
+    }
+
+    @Test
+    void theModelsAnswerCarriesItsReasonBesideTheWorkout() {
+        String answer = """
+                {"why": "Footing facile, tu sors d'une grosse sortie samedi.",
+                 "workout": {"sport": "Run", "name": "Footing", "sections": [
+                   {"title": "Main Set", "repeats": 1, "steps": [{"seconds": 2700, "metres": null, "kind": "THRESHOLD_PACE_OFFSET", "low": 50, "high": 70, "cadence": null, "cue": ""}]}]}}""";
+        var root = JsonMapper.builder().build().readTree(SessionCreator.json(answer));
+        Draft d = JsonMapper.builder().build().treeToValue(root.path("workout"), Draft.class);
+        assertThat(d.build(T).flatten().getFirst().target()).isEqualTo(new io.github.pharaphara.raceradio.core.workout.Target.RunPace(320, 340));
+        assertThat(root.path("why").asString()).startsWith("Footing facile");
     }
 
     @Test

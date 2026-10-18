@@ -101,8 +101,26 @@ public class BotConfiguration {
     }
 
     @Bean
-    SessionReview sessionReview(IntervalsClient intervals, IntervalsWriter writer, CoachModel model, DecisionLog decisions, Clock clock) {
-        return new SessionReview(intervals, writer, model, decisions, props.model().reviewEffort(), clock);
+    io.github.pharaphara.raceradio.bot.archive.StreamCache streamCache(IntervalsClient intervals) {
+        return new io.github.pharaphara.raceradio.bot.archive.StreamCache(intervals, props.dataDir().resolve("streams"));
+    }
+
+    @Bean
+    io.github.pharaphara.raceradio.bot.archive.Archive archive(org.springframework.jdbc.core.JdbcTemplate jdbc, IntervalsClient intervals,
+                                                             io.github.pharaphara.raceradio.bot.archive.StreamCache streams, Clock clock) {
+        return new io.github.pharaphara.raceradio.bot.archive.Archive(jdbc, intervals, streams, clock);
+    }
+
+    @Bean
+    io.github.pharaphara.raceradio.bot.archive.Trends trends(io.github.pharaphara.raceradio.bot.archive.Archive archive,
+                                                           TelegramClient telegram, Clock clock) {
+        return new io.github.pharaphara.raceradio.bot.archive.Trends(archive, telegram, props.telegram().allowedChatId(), clock);
+    }
+
+    @Bean
+    SessionReview sessionReview(IntervalsClient intervals, IntervalsWriter writer, CoachModel model, DecisionLog decisions, Clock clock,
+                                io.github.pharaphara.raceradio.bot.archive.StreamCache streams) {
+        return new SessionReview(intervals, writer, model, decisions, props.model().reviewEffort(), clock, streams::get);
     }
 
     @Bean
@@ -125,8 +143,11 @@ public class BotConfiguration {
 
     @Bean
     io.github.pharaphara.raceradio.bot.chat.Conversation conversation(CoachModel model, MorningCheck morning, DecisionLog decisions,
-                                                                     io.github.pharaphara.raceradio.bot.store.Conversations memory, Clock clock) {
-        return new io.github.pharaphara.raceradio.bot.chat.Conversation(model, morning, decisions, memory, clock);
+                                                                     io.github.pharaphara.raceradio.bot.store.Conversations memory, Clock clock,
+                                                                     io.github.pharaphara.raceradio.bot.archive.Archive archive,
+                                                                     io.github.pharaphara.raceradio.bot.archive.Trends trends) {
+        return new io.github.pharaphara.raceradio.bot.chat.Conversation(model, morning, decisions, memory, clock,
+                new io.github.pharaphara.raceradio.bot.archive.ArchiveHistory(archive, trends));
     }
 
     @Bean
@@ -138,23 +159,28 @@ public class BotConfiguration {
                                 io.github.pharaphara.raceradio.bot.plan.PlanCommands planCommands,
                                 io.github.pharaphara.raceradio.bot.plan.Adapter adapter,
                                 io.github.pharaphara.raceradio.bot.merge.Merger merger,
-                                io.github.pharaphara.raceradio.bot.plan.SessionCreator sessions) {
+                                io.github.pharaphara.raceradio.bot.plan.SessionCreator sessions,
+                                io.github.pharaphara.raceradio.bot.archive.Trends trends) {
         return new CommandRouter(telegram, props.telegram().allowedChatId(), morning, feels, decisions, ledger, journal,
-                model, clock, props.zone(), props.dryRun(), conversation, memory, boards, planCommands, adapter, merger, sessions);
+                model, clock, props.zone(), props.dryRun(), conversation, memory, boards, planCommands, adapter, merger, sessions, trends);
     }
 
     @Bean
     io.github.pharaphara.raceradio.bot.plan.SessionCreator sessionCreator(CoachModel model,
                                                                         io.github.pharaphara.raceradio.bot.plan.Planner planner,
                                                                         IntervalsClient intervals, IntervalsWriter writer,
+                                                                        io.github.pharaphara.raceradio.bot.store.Plans plans,
+                                                                        DecisionLog decisions,
+                                                                        io.github.pharaphara.raceradio.bot.archive.Archive archive,
                                                                         TelegramClient telegram, Clock clock) {
-        return new io.github.pharaphara.raceradio.bot.plan.SessionCreator(model, planner, intervals, writer, telegram,
-                props.telegram().allowedChatId(), clock);
+        return new io.github.pharaphara.raceradio.bot.plan.SessionCreator(model, planner, intervals, writer, plans, decisions,
+                archive, telegram, props.telegram().allowedChatId(), clock);
     }
 
     @Bean
-    io.github.pharaphara.raceradio.bot.merge.Merger merger(IntervalsClient intervals, IntervalsWriter writer) {
-        return new io.github.pharaphara.raceradio.bot.merge.Merger(intervals, writer);
+    io.github.pharaphara.raceradio.bot.merge.Merger merger(IntervalsClient intervals, IntervalsWriter writer,
+                                                         io.github.pharaphara.raceradio.bot.archive.Archive archive) {
+        return new io.github.pharaphara.raceradio.bot.merge.Merger(intervals, writer, archive::invalidate);
     }
 
     @Bean

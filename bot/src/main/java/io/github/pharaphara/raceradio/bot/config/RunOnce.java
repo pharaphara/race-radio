@@ -20,6 +20,8 @@ import java.time.LocalDate;
  *   <li>{@code --race-radio.once=morning}: the morning call.</li>
  *   <li>{@code --race-radio.once=review:<activity id>}: the review of one activity of the last year.</li>
  *   <li>{@code --race-radio.once=session:<request>}: the draft of one workout, shown, never published.</li>
+ *   <li>{@code --race-radio.once=archive}: fills the local archive, as the service does in the background.</li>
+ *   <li>{@code --race-radio.once=trend:<metric>}: one metric over twelve months, from the archive.</li>
  * </ul>
  */
 @Component
@@ -33,11 +35,17 @@ public class RunOnce implements ApplicationRunner {
     private final java.nio.file.Path charts;
     private final io.github.pharaphara.raceradio.bot.strength.BoardReader boards;
     private final io.github.pharaphara.raceradio.bot.plan.SessionCreator sessions;
+    private final io.github.pharaphara.raceradio.bot.archive.Archive archive;
+    private final io.github.pharaphara.raceradio.bot.archive.Trends trends;
 
     public RunOnce(@Value("${race-radio.once:}") String once, MorningCheck morning, SessionReview review,
                    IntervalsClient intervals, ConfigurableApplicationContext context, RaceRadioProperties props,
                    io.github.pharaphara.raceradio.bot.strength.BoardReader boards,
-                   io.github.pharaphara.raceradio.bot.plan.SessionCreator sessions) {
+                   io.github.pharaphara.raceradio.bot.plan.SessionCreator sessions,
+                   io.github.pharaphara.raceradio.bot.archive.Archive archive,
+                   io.github.pharaphara.raceradio.bot.archive.Trends trends) {
+        this.archive = archive;
+        this.trends = trends;
         this.sessions = sessions;
         this.boards = boards;
         this.charts = props.dataDir().resolve("charts");
@@ -71,13 +79,24 @@ public class RunOnce implements ApplicationRunner {
             } catch (java.io.IOException e) {
                 throw new java.io.UncheckedIOException(e);
             }
+        } else if (once.equals("archive")) {
+            archive.backfill();
+            System.out.println("\narchive: " + archive.activities() + " activities");
+        } else if (once.startsWith("trend:")) {
+            String words = once.substring("trend:".length());
+            var metric = io.github.pharaphara.raceradio.bot.archive.MetricCatalog.find(words)
+                    .orElseThrow(() -> new IllegalArgumentException("no metric for: " + words));
+            var answer = trends.answer(metric, 12);
+            System.out.println("\n" + answer.text());
+            save("trend-" + metric.key(), answer.chart() == null ? java.util.List.of() : java.util.List.of(answer.chart()));
         } else if (once.startsWith("session:")) {
             System.out.println("\n" + sessions.prepare("/seance " + once.substring("session:".length())).message());
         } else if (once.equals("fitness")) {
             byte[] chart = morning.fitnessChart();
             save("fitness", chart == null ? java.util.List.of() : java.util.List.of(chart));
         } else {
-            throw new IllegalArgumentException("race-radio.once must be morning, fitness, review:<activity id>, photo:<file> or session:<request>");
+            throw new IllegalArgumentException("race-radio.once must be morning, fitness, archive, trend:<metric>, "
+                    + "review:<activity id>, photo:<file> or session:<request>");
         }
         System.exit(SpringApplication.exit(context, () -> 0));
     }
