@@ -181,7 +181,11 @@ public class Archive {
      * resting heart rate and sleep. Empty when today is not archived yet.
      */
     public Optional<String> morning() {
-        LocalDate today = LocalDate.now(clock);
+        return morning(LocalDate.now(clock));
+    }
+
+    /** That day's morning against the seven before it. */
+    public Optional<String> morning(LocalDate today) {
         List<Map<String, Object>> rows = jdbc.queryForList("SELECT day, json_extract(json, '$.hrv') AS hrv, "
                 + "json_extract(json, '$.restingHR') AS rhr, json_extract(json, '$.sleepSecs') AS sleep "
                 + "FROM archive_wellness WHERE day BETWEEN ? AND ? ORDER BY day", today.minusDays(7).toString(), today.toString());
@@ -190,7 +194,7 @@ public class Archive {
             return Optional.empty();
         }
         List<Map<String, Object>> before = rows.stream().filter(r -> !today.toString().equals(r.get("day"))).toList();
-        StringBuilder b = new StringBuilder("this morning:");
+        StringBuilder b = new StringBuilder("morning of " + today + ":");
         appendAgainst(b, "HRV", now.get("hrv"), before, "hrv", 1, " ms");
         appendAgainst(b, "resting HR", now.get("rhr"), before, "rhr", 1, " bpm");
         appendAgainst(b, "sleep", now.get("sleep"), before, "sleep", 3600, " h");

@@ -62,6 +62,14 @@ public final class SessionReview {
     private final String effort;
     private final Clock clock;
     private final java.util.function.Function<String, ActivityStreams> streams;
+    /** The local archive, for the morning before and what is planned next; null in tests that do not need it. */
+    private io.github.pharaphara.raceradio.bot.archive.Archive archive;
+
+    /** Gives the review the local archive: the morning before the session and what comes next. */
+    public SessionReview withArchive(io.github.pharaphara.raceradio.bot.archive.Archive archive) {
+        this.archive = archive;
+        return this;
+    }
 
     public SessionReview(IntervalsClient intervals, IntervalsWriter writer, CoachModel model, DecisionLog decisions,
                          String effort, Clock clock) {
@@ -132,15 +140,19 @@ public final class SessionReview {
         if (signal.isEmpty()) {
             return new Computed(new SessionFacts(a.id(), a.type(), a.start(), a.movingSeconds(), a.distanceMetres(), a.elevationGainMetres(),
                     a.load(), hrMean, false, null, null, null, null, List.of(), List.of(), false, List.of(),
-                    null, null, Map.of(), null, null, null, null), null, null);
+                    null, null, Map.of(), null, null, null, null, context(a, null, null, streams)), null, null);
         }
         EffortSignal s = signal.get();
         List<PlannedStep> plan = plannedWork(a, s, settings);
         List<Block> device = deviceWork(a.id(), s.values());
         SessionStructure.Result structure = SessionStructure.of(device, plan, s.values(), s.plateau());
 
+        Optional<Samples> heart = streams.get("heartrate");
+        Optional<Samples> altitude = streams.get("altitude");
         List<SessionFacts.BlockFact> work = structure.work().stream().map(b -> new SessionFacts.BlockFact(
-                b.start(), b.seconds(), Formats.duration(b.seconds()), Formats.effort(b.mean(), s.unit(), a.type()))).toList();
+                b.start(), b.seconds(), Formats.duration(b.seconds()), Formats.effort(b.mean(), s.unit(), a.type()),
+                heart.map(h -> meanOrNull(h, b.start(), b.end())).orElse(null),
+                altitude.map(alt -> climb(alt, b.start(), b.end())).orElse(null))).toList();
         List<String> reps = structure.repetitions().stream()
                 .map(g -> g.size() + " × " + Formats.repDuration(g.getFirst().seconds())).toList();
         List<SessionFacts.ComparisonFact> comparison = structure.againstPlan().stream().map(c -> comparison(c, s, a.type())).toList();
@@ -184,8 +196,133 @@ public final class SessionReview {
         return new Computed(new SessionFacts(a.id(), a.type(), a.start(), a.movingSeconds(), a.distanceMetres(), a.elevationGainMetres(),
                 a.load(), hrMean == null ? null : round1(hrMean), true, s.column(), s.unit(), structure.source().name(), structure.model(),
                 work, reps, !plan.isEmpty(), comparison, power, zoneModel, zones, decoupling, dps,
-                threshold, threshold == null ? null : thresholdName(a.type()) + " " + Formats.effort(threshold, s.unit(), a.type())),
+                threshold, threshold == null ? null : thresholdName(a.type()) + " " + Formats.effort(threshold, s.unit(), a.type()),
+                context(a, s, hr.orElse(null), streams)),
                 s.values(), hr.orElse(null));
+    }
+
+    /** Feel as Intervals.icu stores it, 1 (strong) to 5 (weak). */
+    private static final List<String> FEELS = List.of("fort", "bien", "normal", "moyen", "faible");
+    /** Below this speed the athlete is stopped, not moving: pauses at a junction, a café, a gate. */
+    static final double MOVING_SPEED = 0.5;
+
+    SessionFacts.Context context(ActivitySummary a, EffortSignal s, Samples hr, ActivityStreams streams) {
+        String feel = a.feel() == null || a.feel() < 1 || a.feel() > 5 ? null : FEELS.get(a.feel() - 1);
+        Integer rpe = a.rpe() == null || a.rpe() < 1 ? null : a.rpe();
+        Double temp = a.averageTemperature() != null ? Double.valueOf(round1(a.averageTemperature()))
+                : streams.get("temp").map(Samples::mean).filter(v -> !v.isNaN()).map(v -> Double.valueOf(round1(v))).orElse(null);
+        Integer cadence = null;
+        String cadenceUnit = null;
+        if (a.averageCadence() != null && a.averageCadence() > 0) {
+            boolean run = EffortSignal.RUN.contains(a.type());
+            cadence = (int) Math.round(run ? 2 * a.averageCadence() : a.averageCadence());
+            cadenceUnit = run ? "pas/min" : EffortSignal.BIKE.contains(a.type()) ? "rpm" : "mouvements/min";
+        }
+        String moving = null;
+        List<SessionFacts.PeakFact> peaks = new ArrayList<>();
+        if (s != null) {
+            Optional<Samples> speed = streams.get("velocity_smooth");
+            moving = speed.map(v -> movingMean(s.values(), v)).filter(m -> !m.isNaN())
+                    .map(m -> Formats.effort(m, s.unit(), a.type())).orElse(null);
+            for (int window : new int[] {300, 1200}) {
+                int[] at = bestWindow(s.values(), window);
+                if (at != null) {
+                    double effort = s.values().slice(at[0], at[0] + window).mean();
+                    Integer h = hr == null ? null : (int) Math.round(hr.slice(at[0], at[0] + window).mean());
+                    peaks.add(new SessionFacts.PeakFact(window / 60 + " min", Formats.effort(effort, s.unit(), a.type()),
+                            h == null || h <= 0 ? null : h));
+                }
+            }
+        }
+        String morning = null;
+        List<String> next = List.of();
+        if (archive != null && a.start() != null) {
+            try {
+                LocalDate day = a.start().toLocalDate();
+                morning = archive.morning(day).orElse(null);
+                next = archive.planned(day.plusDays(1), 3);
+            } catch (RuntimeException e) {
+                LOG.warn("archive context for {} unavailable: {}", a.id(), e.getMessage());
+            }
+        }
+        return new SessionFacts.Context(rpe, feel, temp, moving, cadence, cadenceUnit, List.copyOf(peaks), morning, next);
+    }
+
+    /** Mean of positive readings over [from, to), rounded; null when there are none. */
+    static Integer meanOrNull(Samples s, int from, int to) {
+        double sum = 0;
+        int n = 0;
+        for (int i = Math.max(0, from); i < Math.min(to, s.length()); i++) {
+            double v = s.at(i);
+            if (v > 0) {
+                sum += v;
+                n++;
+            }
+        }
+        return n == 0 ? null : (int) Math.round(sum / n);
+    }
+
+    /**
+     * Metres climbed over [from, to): positive changes of the altitude smoothed over 10 seconds, so
+     * barometric noise does not add up to a hill. Null without readings.
+     */
+    static Integer climb(Samples altitude, int from, int to) {
+        Samples smooth = altitude.rollingMean(10);
+        double gain = 0;
+        double previous = Double.NaN;
+        for (int i = Math.max(0, from); i < Math.min(to, smooth.length()); i++) {
+            double v = smooth.at(i);
+            if (Double.isNaN(v)) {
+                continue;
+            }
+            if (!Double.isNaN(previous) && v > previous) {
+                gain += v - previous;
+            }
+            previous = v;
+        }
+        return Double.isNaN(previous) ? null : (int) Math.round(gain);
+    }
+
+    /** Mean effort over the seconds spent moving. */
+    static double movingMean(Samples effort, Samples speed) {
+        int n = Math.min(effort.length(), speed.length());
+        double sum = 0;
+        int count = 0;
+        for (int i = 0; i < n; i++) {
+            double v = speed.at(i);
+            double e = effort.at(i);
+            if (v > MOVING_SPEED && !Double.isNaN(e)) {
+                sum += e;
+                count++;
+            }
+        }
+        return count == 0 ? Double.NaN : sum / count;
+    }
+
+    /** Start of the window with the highest mean, as {start}; null when the session is shorter. */
+    static int[] bestWindow(Samples s, int window) {
+        if (s.length() < window) {
+            return null;
+        }
+        double sum = 0;
+        for (int i = 0; i < window; i++) {
+            sum += value(s, i);
+        }
+        double best = sum;
+        int start = 0;
+        for (int i = window; i < s.length(); i++) {
+            sum += value(s, i) - value(s, i - window);
+            if (sum > best) {
+                best = sum;
+                start = i - window + 1;
+            }
+        }
+        return new int[] {start};
+    }
+
+    private static double value(Samples s, int i) {
+        double v = s.at(i);
+        return Double.isNaN(v) ? 0 : v;
     }
 
     /** What the threshold is called in each sport: FTP on the bike, CSS in the water. */
@@ -249,17 +386,29 @@ public final class SessionReview {
 
     String prompt(SessionFacts f, String activityName) {
         return """
-                Task: write the review of the session below, in French, for Telegram, about 150 words of prose,
-                no table and no list of figures.
-                Answer three questions, in this order:
-                1. Did it go well? One or two sentences.
-                2. One thing to fix or to notice: a single concrete point, or "rien à redire" when the data
-                   truly shows nothing.
-                3. What it means for the next session: one recommendation.
-                Add a fourth only if something is worrying: is the bigger picture still on track?
+                Task: write the review of the session below, in French, for Telegram, 150 to 250 words.
+                Shape, in this order:
+                1. One sentence of verdict: how the session went against what was planned, or, without a
+                   plan, what it was. No compliment that a fact does not support.
+                2. Two to four short headed sections, only those with something to say, each a bold title
+                   on its own line (**Titre**) then two or three lines starting with "• ", key figures in
+                   bold:
+                   **Exécution** (planned against done, deviations named), **Intensité et charge**
+                   (weighted power, intensity, load, variability explained by the climbing, heat when
+                   temperature is high), **Effort de pointe** (the best five or twenty minutes and the heart
+                   rate they cost), **Technique** (cadence or stride when it stands out), **Forme du jour**
+                   (that morning against the week, the effort rating and feel entered on the watch).
+                3. **Et ensuite** : the next session on the calendar if there is one, and one concrete
+                   recommendation for it.
                 Rules:
-                - Every figure you mention must help answer one of these questions; leave the others out.
-                - Use only the figures given, as written. Never compute or estimate one.
+                - Every figure you mention must serve the verdict, a section or the recommendation; leave
+                  the others out. Use only the figures given, as written. Never compute or estimate one.
+                - The effort rating and feel entered on the watch are the athlete's own: when they disagree
+                  with the numbers, trust them and say so. When they are absent, say nothing about them.
+                - Heat raises heart rate at the same effort: above about 25 °C, read heart rate with that in
+                  mind.
+                - Never an explanation the knowledge base does not hold: no toxins, no lactate to flush, no
+                  recovery delay in hours derived from load, no muscle-fibre story.
                 - The structure source says where the blocks come from: DEVICE_LAPS means the watch's laps
                   of the planned workout, DETECTED means detected from the effort signal. Say which in plain
                   French ("les tours de ta montre", "les blocs que j'ai détectés"), never the code itself.

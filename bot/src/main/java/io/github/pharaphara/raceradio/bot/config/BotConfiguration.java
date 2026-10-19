@@ -143,8 +143,9 @@ public class BotConfiguration {
 
     @Bean
     SessionReview sessionReview(IntervalsClient intervals, IntervalsWriter writer, CoachModel model, DecisionLog decisions, Clock clock,
-                                io.github.pharaphara.raceradio.bot.archive.StreamCache streams) {
-        return new SessionReview(intervals, writer, model, decisions, props.model().reviewEffort(), clock, streams::get);
+                                io.github.pharaphara.raceradio.bot.archive.StreamCache streams,
+                                io.github.pharaphara.raceradio.bot.archive.Archive archive) {
+        return new SessionReview(intervals, writer, model, decisions, props.model().reviewEffort(), clock, streams::get).withArchive(archive);
     }
 
     @Bean
@@ -152,7 +153,7 @@ public class BotConfiguration {
                                     TelegramClient telegram, Clock clock) {
         return new ActivityWatcher(intervals, reviewed, review, (activity, outcome) -> {
             if (props.telegram().allowedChatId() != 0) {
-                telegram.send(props.telegram().allowedChatId(), outcome.message());
+                telegram.sendRich(props.telegram().allowedChatId(), outcome.message());
                 for (byte[] image : outcome.images()) {
                     telegram.sendPhoto(props.telegram().allowedChatId(), image, null);
                 }
