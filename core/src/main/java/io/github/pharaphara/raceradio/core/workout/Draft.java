@@ -93,7 +93,8 @@ public record Draft(String sport, String name, List<DraftSection> sections) {
         return (int) total;
     }
 
-    private static int seconds(Step s, Thresholds t) {
+    /** How long one step lasts, a distance converted at its own target pace. */
+    public static int seconds(Step s, Thresholds t) {
         if (s.length() instanceof Length.Time time) {
             return time.seconds();
         }

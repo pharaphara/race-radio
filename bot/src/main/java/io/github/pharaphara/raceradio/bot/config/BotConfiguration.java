@@ -42,7 +42,7 @@ public class BotConfiguration {
     /** Standing instructions, then the knowledge base, in this order. */
     static final List<String> PROMPT = List.of("prompt/voice.md", "knowledge/README.md", "knowledge/readiness.md",
             "knowledge/load.md", "knowledge/zones.md", "knowledge/bike.md", "knowledge/run.md", "knowledge/swim.md",
-            "knowledge/strength.md", "knowledge/periodization.md", "knowledge/sessions.md");
+            "knowledge/strength.md", "knowledge/periodization.md", "knowledge/sessions.md", "knowledge/nutrition.md");
 
     private final RaceRadioProperties props;
 
@@ -193,12 +193,13 @@ public class BotConfiguration {
     @Bean
     io.github.pharaphara.raceradio.bot.plan.SessionCreator sessionCreator(CoachModel model,
                                                                         io.github.pharaphara.raceradio.bot.plan.Planner planner,
-                                                                        IntervalsClient intervals, IntervalsWriter writer,
+                                                                        IntervalsWriter writer,
                                                                         io.github.pharaphara.raceradio.bot.store.Plans plans,
                                                                         DecisionLog decisions,
+                                                                        io.github.pharaphara.raceradio.bot.store.Conversations memory,
                                                                         io.github.pharaphara.raceradio.bot.archive.Archive archive,
                                                                         TelegramClient telegram, Clock clock) {
-        return new io.github.pharaphara.raceradio.bot.plan.SessionCreator(model, planner, intervals, writer, plans, decisions,
+        return new io.github.pharaphara.raceradio.bot.plan.SessionCreator(model, planner, writer, plans, decisions, memory,
                 archive, telegram, props.telegram().allowedChatId(), clock);
     }
 

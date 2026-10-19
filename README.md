@@ -105,9 +105,10 @@ each activity's streams once: questions about any period are answered without ca
 | `/objectif` | goals: `/objectif course 2027-05-23 A triathlon M`, `/objectif volume 6 h`, `/objectif forme` |
 | `/dispo lun 1h, mer 45min, sam 2h` | available time |
 | `/sports natation off` | sports in season |
-| `/mode planifier` · `ajuster` · `analyser` | how much the coach does with the calendar |
-| `/plan` | next week and what your hours can buy |
+| `/mode demande` · `analyser` | create on request, or leave the calendar to another tool |
+| `/plan` | what your hours can buy against your objective |
 | `/seance demain cap facile` | one workout, proposed and calibrated, then Publier, Modifier or Annuler |
+| `/semaine` · `/semaine demain bloc seuil` | a whole week, proposed day by day under the same rules, published only on request |
 | `/tendance vélo efficacité 12 mois` | one metric over months, from the archive (`/tendance` alone lists them) |
 | `/segment` · `/segment jonte` | your regular segments, and one segment's history |
 | `/fusionner i123 i124` | merge an activity split in two, after confirmation |
@@ -134,6 +135,12 @@ checks against your own account using a local `.env`.
 
 The usual abbreviations for these metrics are trademarks. The code and the messages say *weighted
 average power*, *intensity*, *load*, *fitness*, *fatigue* and *form*. A test enforces it.
+
+## How it is made
+
+Designed, specified and run by its author, who decides what it does and reviews every change
+before it is merged. The code is written with an AI coding assistant working to those decisions;
+[CLAUDE.md](CLAUDE.md) holds the working notes it follows, and the tests hold it to them.
 
 ## Credits
 

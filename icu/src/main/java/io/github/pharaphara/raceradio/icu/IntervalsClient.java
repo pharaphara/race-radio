@@ -82,6 +82,11 @@ public class IntervalsClient {
         return get(athletePath("wellness?oldest=" + from + "&newest=" + to), new TypeReference<>() { });
     }
 
+    /** Calendar entries exactly as Intervals.icu sends them, for the local cache of what is planned. */
+    public List<JsonNode> eventsRaw(LocalDate from, LocalDate to) {
+        return get(athletePath("events?oldest=" + from + "&newest=" + to), new TypeReference<>() { });
+    }
+
     /** The CSV export of an activity's streams, as sent, so it can be kept and parsed again later. */
     public String streamsCsv(String activityId) {
         return send(request("activity/" + activityId + "/streams.csv"));

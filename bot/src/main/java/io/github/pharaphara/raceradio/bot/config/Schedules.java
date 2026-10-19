@@ -112,19 +112,12 @@ public class Schedules implements SchedulingConfigurer {
         }
     }
 
-    /** The week's recap and, in planning mode, next week published. */
+    /** The week's recap. Nothing is planned or published unasked: /semaine does that on request. */
     void sundayEvening() {
         try {
             StringBuilder b = new StringBuilder(planner.recap());
-            var next = planner.nextWeek();
-            b.append("\n\n").append(planner.describe(next));
-            if (plans.mode() == io.github.pharaphara.raceradio.bot.store.Plans.Mode.PLAN && !next.sessions().isEmpty()) {
-                var problems = planner.publish(next);
-                b.append(problems.isEmpty()
-                        ? (!planner.publishes() ? "\n\nMode sec : rien n'a été publié." : "\n\nPubliée dans Intervals.icu, elle arrive sur ta montre.")
-                        : "\n\nNon publié : " + String.join(" ; ", problems));
-            }
             planner.feasibility().ifPresent(f -> b.append("\n\n").append(planner.describe(f)));
+            b.append("\n\nLa semaine prochaine : /semaine pour que je te la propose.");
             if (props.telegram().allowedChatId() != 0) {
                 telegram.send(props.telegram().allowedChatId(), b.toString());
             }

@@ -66,6 +66,27 @@ public final class WorkoutText {
         return b.toString();
     }
 
+    /** Longest note kept above the steps. */
+    static final int MAX_NOTE = 600;
+
+    /**
+     * A note made safe to sit above the steps: one paragraph (a line of its own could be read as a
+     * section or a step), no leading dash, no trailing repeat count such as "3x", at most
+     * {@value #MAX_NOTE} characters. Empty when there is nothing to say.
+     */
+    public static String note(String note) {
+        if (note == null) {
+            return "";
+        }
+        String s = note.replaceAll("\\s+", " ").strip().replaceFirst("^[-•*\\s]+", "");
+        s = s.replaceFirst("(\\d+)\\s*[xX×]\\s*$", "$1 fois");
+        if (s.length() > MAX_NOTE) {
+            int cut = s.lastIndexOf(' ', MAX_NOTE);
+            s = s.substring(0, cut > 0 ? cut : MAX_NOTE) + "…";
+        }
+        return s;
+    }
+
     /** Everything that would make the calendar misread or reject the workout. Empty when fine. */
     public static List<String> problems(Workout w) {
         List<String> p = new ArrayList<>();

@@ -20,6 +20,7 @@ import java.time.LocalDate;
  *   <li>{@code --race-radio.once=morning}: the morning call.</li>
  *   <li>{@code --race-radio.once=review:<activity id>}: the review of one activity of the last year.</li>
  *   <li>{@code --race-radio.once=session:<request>}: the draft of one workout, shown, never published.</li>
+ *   <li>{@code --race-radio.once=week:<request>}: the draft of a week, shown in full, never published.</li>
  *   <li>{@code --race-radio.once=archive}: fills the local archive, as the service does in the background.</li>
  *   <li>{@code --race-radio.once=strava}: one step of the Strava segment harvest.</li>
  *   <li>{@code --race-radio.once=trend:<metric>}: one metric over twelve months, from the archive.</li>
@@ -97,12 +98,18 @@ public class RunOnce implements ApplicationRunner {
             save("trend-" + metric.key(), answer.chart() == null ? java.util.List.of() : java.util.List.of(answer.chart()));
         } else if (once.startsWith("session:")) {
             System.out.println("\n" + sessions.prepare("/seance " + once.substring("session:".length())).message());
+        } else if (once.startsWith("week:")) {
+            var p = sessions.prepareWeek("/semaine " + once.substring("week:".length()));
+            System.out.println("\n" + p.message());
+            if (p.pending() != null) {
+                System.out.println("\n----- détail\n" + sessions.detail(p.pending()));
+            }
         } else if (once.equals("fitness")) {
             byte[] chart = morning.fitnessChart();
             save("fitness", chart == null ? java.util.List.of() : java.util.List.of(chart));
         } else {
             throw new IllegalArgumentException("race-radio.once must be morning, fitness, archive, strava, trend:<metric>, "
-                    + "review:<activity id>, photo:<file> or session:<request>");
+                    + "review:<activity id>, photo:<file>, session:<request> or week:<request>");
         }
         System.exit(SpringApplication.exit(context, () -> 0));
     }

@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.time.LocalDate;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -42,10 +43,40 @@ class SessionCreatorTest {
         Workout w = SessionCreator.buildable(d.build(T));
         // The cue with a digit would be read as an instruction by the calendar: cues are dropped.
         assertThat(w.flatten()).allMatch(s -> s.cue().isEmpty());
-        String preview = SessionCreator.preview(TODAY.plusDays(1), w, T, "Trois blocs au seuil, tu es frais.", "");
-        assertThat(preview).contains("« Seuil » · vélo · 1h00 · dimanche 18 octobre")
+        String preview = SessionCreator.preview(TODAY.plusDays(1), w, T, "Trois blocs au seuil, tu es frais.",
+                "Tiens la deuxième moitié de chaque bloc. RPE 7 sur 10.", "");
+        assertThat(preview).contains("« Seuil » · vélo · 1 h 00 · dimanche 18 octobre")
                 .contains("Trois blocs au seuil, tu es frais.")
-                .contains("Main Set 3x").contains("280w").contains("Ça te va ?");
+                .contains("Corps de séance · 3 × (10 min à 280 W, 90 rpm puis 5 min à zone 1)")
+                .contains("Note d'exécution : Tiens la deuxième moitié")
+                .contains("Ça te va ?");
+    }
+
+    @Test
+    void distanceStepsShowTheTimeTheyWillTakeAtTheirPace() {
+        Workout w = new Draft("Run", "VO2", List.of(new Draft.DraftSection("Main Set", 5, List.of(
+                new Draft.DraftStep(null, 1000, Draft.Kind.PACE, 250, 260.0, null, "relâché"),
+                new Draft.DraftStep(120, null, Draft.Kind.HEART_RATE_ZONE, 1, null, null, ""))))).build(T);
+        assertThat(WorkoutFormat.lines(w, T)).containsExactly(
+                "Corps de séance · 5 × (1 km ≈ 4 min 15 à 4:10-4:20/km « relâché » puis 2 min à FC zone 1)");
+    }
+
+    @Test
+    void aWeekIsReadDaySortedFromTheModelsAnswer() {
+        String answer = """
+                {"why": "Une semaine de reprise.", "days": [
+                  {"day": "2026-10-21", "note": "Facile.", "workout": {"sport": "Run", "name": "Course facile · 40 min", "sections": [
+                     {"title": "Main Set", "repeats": 1, "steps": [{"seconds": 2400, "metres": null, "kind": "THRESHOLD_PACE_OFFSET", "low": 50, "high": 70, "cadence": null, "cue": "souple"}]}]}},
+                  {"day": "2026-10-19", "note": "- Seuil.\\n3x", "workout": {"sport": "Ride", "name": "Vélo seuil · 3 × 10 min", "sections": [
+                     {"title": "Main Set", "repeats": 3, "steps": [{"seconds": 600, "metres": null, "kind": "THRESHOLD_POWER_PERCENT", "low": 95, "high": 100, "cadence": null, "cue": "régulier"},
+                                                                  {"seconds": 300, "metres": null, "kind": "POWER_ZONE", "low": 1, "high": null, "cadence": null, "cue": ""}]}]}}]}""";
+        var root = JsonMapper.builder().build().readTree(SessionCreator.json(answer));
+        List<SessionCreator.Item> items = SessionCreator.weekItems(root, T);
+        assertThat(items).extracting(SessionCreator.Item::day).containsExactly(LocalDate.of(2026, 10, 19), LocalDate.of(2026, 10, 21));
+        assertThat(items.getFirst().note()).isEqualTo("Seuil. 3 fois");
+        String week = SessionCreator.weekPreview(LocalDate.of(2026, 10, 19), items, T, "Une semaine de reprise.");
+        assertThat(week).contains("lun. 19 · Vélo seuil · 3 × 10 min · 45 min · dure").contains("mar. 20 · repos")
+                .contains("mer. 21 · Course facile · 40 min · 40 min").contains("1 séance dure");
     }
 
     @Test

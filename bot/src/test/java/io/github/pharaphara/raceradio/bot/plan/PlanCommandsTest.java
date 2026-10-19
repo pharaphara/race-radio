@@ -33,13 +33,15 @@ class PlanCommandsTest {
     Path dir;
 
     private Plans plans;
+    private org.springframework.jdbc.core.JdbcTemplate jdbc;
     private Planner planner;
     private PlanCommands commands;
     private final List<String> writes = new ArrayList<>();
 
     @BeforeEach
     void setUp() {
-        plans = new Plans(TestDb.in(dir));
+        jdbc = TestDb.in(dir);
+        plans = new Plans(jdbc);
         IntervalsClient icu = new IntervalsClient(new IntervalsCredentials("i42", "k"), HttpClient.newHttpClient(), URI.create("http://127.0.0.1:1/")) {
             @Override
             public Athlete athlete() {
@@ -88,12 +90,21 @@ class PlanCommandsTest {
     }
 
     @Test
-    void thePlanShowsThePhaseTheWeekAndWhatTheTimeCanBuy() {
+    void thePlanShowsWhatTheTimeCanBuyAndPointsToTheWeekOnRequest() {
         commands.availability("/dispo lun 1h, mer 45min, jeu 1h, sam 2h, dim 1h30");
         commands.objective("/objectif course 2027-05-23 A triathlon M");
         String plan = commands.plan();
-        assertThat(plan).contains("Semaine du 16 novembre").contains("phase de base").contains("samedi")
-                .contains("Faisabilité").contains("Un chrono ne se déduit pas");
+        assertThat(plan).contains("Faisabilité").contains("Un chrono ne se déduit pas").contains("/semaine");
+    }
+
+    @Test
+    void storedModesFromBeforeTheOnDemandChangeAreReadSafely() {
+        commands.mode("/mode demande");
+        assertThat(plans.mode()).isEqualTo(Plans.Mode.ON_DEMAND);
+        jdbc.update("UPDATE setting SET value = 'PLAN' WHERE key = 'mode'");
+        assertThat(plans.mode()).isEqualTo(Plans.Mode.ON_DEMAND);
+        jdbc.update("UPDATE setting SET value = 'OFF' WHERE key = 'mode'");
+        assertThat(plans.mode()).isEqualTo(Plans.Mode.ANALYSE);
     }
 
     @Test
@@ -112,7 +123,6 @@ class PlanCommandsTest {
     @Test
     void theModeCanBeSetSoThatAnotherToolPlans() {
         assertThat(commands.mode("/mode analyser")).contains("Garmin Coach");
-        assertThat(plans.mode()).isEqualTo(Plans.Mode.OFF);
-        assertThat(commands.plan()).contains("n'est pas publiée");
+        assertThat(plans.mode()).isEqualTo(Plans.Mode.ANALYSE);
     }
 }

@@ -132,9 +132,8 @@ public final class PlanCommands {
     public String mode(String text) {
         String rest = text.replaceFirst("(?i)^/mode(@\\S+)?\\s*", "").strip().toLowerCase(Locale.ROOT);
         Plans.Mode m = switch (rest) {
-            case "planifier", "plan" -> Plans.Mode.PLAN;
-            case "ajuster", "adapter" -> Plans.Mode.ADAPT;
-            case "analyser", "off" -> Plans.Mode.OFF;
+            case "demande", "à la demande", "a la demande", "planifier", "ajuster" -> Plans.Mode.ON_DEMAND;
+            case "analyser", "off" -> Plans.Mode.ANALYSE;
             default -> null;
         };
         if (m != null) {
@@ -142,19 +141,17 @@ public final class PlanCommands {
         }
         Plans.Mode now = plans.mode();
         return "Mode : " + switch (now) {
-            case PLAN -> "planifier (je construis et publie ta semaine chaque dimanche soir)";
-            case ADAPT -> "ajuster (je ne crée rien, j'allège mes propres séances les jours orange ou rouges)";
-            case OFF -> "analyser (je ne touche pas au calendrier : je commente ce qu'un autre outil, comme Garmin Coach, a planifié)";
-        } + (m == null ? "\nChanger : /mode planifier, /mode ajuster ou /mode analyser" : "");
+            case ON_DEMAND -> "à la demande (je crée une séance avec /seance ou une semaine avec /semaine quand tu le demandes, "
+                    + "et j'allège mes propres séances un matin orange ou rouge)";
+            case ANALYSE -> "analyser (je ne touche pas au calendrier : je commente ce qu'un autre outil, comme Garmin Coach, a planifié)";
+        } + (m == null ? "\nChanger : /mode demande ou /mode analyser" : "");
     }
 
+    /** Where the athlete stands against the objective; the week itself is made with /semaine. */
     public String plan() {
-        StringBuilder b = new StringBuilder(planner.describe(planner.nextWeek()));
-        planner.feasibility().ifPresent(f -> b.append("\n\n").append(planner.describe(f)));
-        if (plans.mode() != Plans.Mode.PLAN) {
-            b.append("\n\n(Mode ").append(plans.mode() == Plans.Mode.ADAPT ? "ajuster" : "analyser").append(" : cette semaine n'est pas publiée.)");
-        }
-        return b.toString();
+        return planner.feasibility().map(planner::describe)
+                .orElse("Pas d'objectif de course enregistré : /objectif course AAAA-MM-JJ A description.")
+                + "\n\nPour programmer : /semaine (la semaine prochaine) ou /seance (une séance).";
     }
 
     static Integer minutes(String s) {

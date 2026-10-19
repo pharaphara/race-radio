@@ -18,14 +18,23 @@ import java.util.Set;
 @Repository
 public class Plans {
 
-    /** How much the coach does with the calendar. */
+    /**
+     * How much the coach does with the calendar. Nothing is ever planned unasked: a workout or a
+     * week is created on request (/seance, /semaine) and published only once the athlete agrees.
+     */
     public enum Mode {
-        /** Builds the week and publishes it. */
-        PLAN,
-        /** Publishes nothing new, but lightens its own workouts on yellow and red days. */
-        ADAPT,
+        /** Creates on request, and lightens its own workouts on yellow and red mornings. */
+        ON_DEMAND,
         /** Never touches the calendar: reads what another tool planned and comments on it. */
-        OFF
+        ANALYSE;
+
+        /** Reads a stored value, including those of the former modes (PLAN, ADAPT, OFF). */
+        static Mode stored(String v) {
+            return switch (v) {
+                case "OFF", "ANALYSE" -> ANALYSE;
+                default -> ON_DEMAND;
+            };
+        }
     }
 
     public record StoredObjective(long id, Objective objective) {
@@ -59,7 +68,7 @@ public class Plans {
     }
 
     public Mode mode() {
-        return get("mode").map(Mode::valueOf).orElse(Mode.PLAN);
+        return get("mode").map(Mode::stored).orElse(Mode.ON_DEMAND);
     }
 
     public void mode(Mode m) {

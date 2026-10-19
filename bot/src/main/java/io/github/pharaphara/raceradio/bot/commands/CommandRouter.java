@@ -37,10 +37,10 @@ public final class CommandRouter {
             /objectif · tes objectifs (course datée, volume ou forme)
             /dispo lun 1h, mer 45min, sam 2h · tes créneaux
             /sports natation off · les sports de la saison
-            /mode planifier · ajuster · analyser
-            /plan · la semaine prochaine et la faisabilité
-            /seance demain vélo 3x10min à 280W · une séance à la demande, montrée avant publication
-            /fusionner i123 i124 · recoller une séance coupée en deux (avec confirmation)
+            /seance demain cap facile · une séance proposée, montrée avant publication
+            /semaine · ta semaine proposée, jour par jour, montrée avant publication
+            /plan · où tu en es face à ton objectif
+            /mode demande · analyser (si un autre outil planifie)
             /note j'ai mal au mollet gauche · un fait que le coach doit garder en tête
             /notes · les faits gardés · /oubli 3 · en retirer un
             /tendance vélo efficacité 12 mois · une mesure dans le temps (/tendance seul : la liste)
@@ -178,6 +178,10 @@ public final class CommandRouter {
             case "/plan" -> planCommands.plan();
             case "/seance", "/séance" -> {
                 sessions.draft(text);
+                yield null;
+            }
+            case "/semaine" -> {
+                sessions.week(text);
                 yield null;
             }
             case "/fusionner" -> {

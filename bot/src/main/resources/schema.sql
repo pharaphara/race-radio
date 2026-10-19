@@ -153,3 +153,13 @@ CREATE TABLE IF NOT EXISTS strava_effort (
     json             TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS strava_effort_segment ON strava_effort (segment_id, day);
+
+-- What is planned on the calendar, cached at each archive refresh and after each publication,
+-- so a prescription knows what is already there without asking Intervals.icu again.
+CREATE TABLE IF NOT EXISTS archive_event (
+    id          INTEGER PRIMARY KEY,
+    day         TEXT NOT NULL,
+    json        TEXT NOT NULL,
+    fetched_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS archive_event_day ON archive_event (day);

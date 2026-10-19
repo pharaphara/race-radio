@@ -96,12 +96,30 @@ public class TelegramClient {
 
     /** Sends text with one row of buttons; each button returns its {@code data} when pressed. */
     public void sendWithButtons(long chatId, String text, Map<String, String> labelToData) {
-        List<Map<String, String>> row = new ArrayList<>();
-        labelToData.forEach((label, data) -> row.add(Map.of("text", label, "callback_data", data)));
+        sendWithButtonRows(chatId, text, List.of(labelToData));
+    }
+
+    /**
+     * Sends text with buttons, one map per row, in order. A text longer than one message goes out
+     * in several, the buttons under the last.
+     */
+    public void sendWithButtonRows(long chatId, String text, List<Map<String, String>> rows) {
+        List<List<Map<String, String>>> keyboard = new ArrayList<>();
+        for (Map<String, String> r : rows) {
+            List<Map<String, String>> row = new ArrayList<>();
+            r.forEach((label, data) -> row.add(Map.of("text", label, "callback_data", data)));
+            if (!row.isEmpty()) {
+                keyboard.add(row);
+            }
+        }
+        List<String> parts = split(text);
+        for (int i = 0; i < parts.size() - 1; i++) {
+            call("sendMessage", Map.of("chat_id", chatId, "text", parts.get(i)), Duration.ofSeconds(20));
+        }
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("chat_id", chatId);
-        body.put("text", text.length() > MAX_MESSAGE ? text.substring(0, MAX_MESSAGE) : text);
-        body.put("reply_markup", Map.of("inline_keyboard", List.of(row)));
+        body.put("text", parts.getLast());
+        body.put("reply_markup", Map.of("inline_keyboard", keyboard));
         call("sendMessage", body, Duration.ofSeconds(20));
     }
 
