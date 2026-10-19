@@ -62,6 +62,20 @@ public final class Svg {
         return this;
     }
 
+    /** A filled shape from a line down to {@code baseline}, without outline. Points must be present. */
+    public Svg area(double[] xs, double[] ys, double baseline, String fill, double opacity) {
+        if (xs.length < 2) {
+            return this;
+        }
+        StringBuilder d = new StringBuilder("M").append(n(xs[0])).append(' ').append(n(baseline)).append(' ');
+        for (int i = 0; i < xs.length; i++) {
+            d.append('L').append(n(xs[i])).append(' ').append(n(ys[i])).append(' ');
+        }
+        d.append('L').append(n(xs[xs.length - 1])).append(' ').append(n(baseline)).append(" Z");
+        b.append(String.format(Locale.ROOT, "<path d=\"%s\" fill=\"%s\" fill-opacity=\"%.2f\" stroke=\"none\"/>%n", d, fill, opacity));
+        return this;
+    }
+
     /** A 2 px polyline with round joins; NaN points break the line rather than dropping to zero. */
     public Svg path(double[] xs, double[] ys, String stroke) {
         StringBuilder d = new StringBuilder();

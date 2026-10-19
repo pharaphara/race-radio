@@ -113,6 +113,16 @@ public final class Charts {
      */
     public static String panels(String title, String subtitle, double[] x, DoubleFunction<String> xFormat, double xTickStep,
                                 List<Panel> panels, List<Band> bands, Theme t) {
+        return panels(title, subtitle, x, xFormat, xTickStep, panels, bands, null, t);
+    }
+
+    /**
+     * Panels with a backdrop, such as the elevation profile of a ride: a faint grey area behind
+     * every panel, scaled from its own lowest to highest value, with no axis, since only its shape
+     * matters (where it climbs, where it descends). Null for none.
+     */
+    public static String panels(String title, String subtitle, double[] x, DoubleFunction<String> xFormat, double xTickStep,
+                                List<Panel> panels, List<Band> bands, double[] backdrop, Theme t) {
         double height = TITLE + panels.size() * PANEL + (panels.size() - 1) * PANEL_GAP + AXIS + 8;
         Svg svg = header(new Svg(WIDTH, height, t), title, subtitle, t);
         double xMin = x[0];
@@ -130,6 +140,9 @@ public final class Charts {
                     ? Scale.stepped(lo, hi, panel.inverted() ? top + 14 : bottom, panel.inverted() ? bottom : top + 14, panel.tickStep())
                     : Scale.nice(lo, hi, panel.inverted() ? top + 14 : bottom, panel.inverted() ? bottom : top + 14, 4);
 
+            if (backdrop != null) {
+                backdrop(svg, x, backdrop, sx, top + 14, bottom, t);
+            }
             for (Band band : bands) {
                 svg.rect(sx.at(band.from()), top + 14, sx.at(band.to()) - sx.at(band.from()), bottom - top - 14, t.slot(0), 0, 0.12);
             }
@@ -197,6 +210,35 @@ public final class Charts {
             svg.text(sx.at(tick), axisY + 14, xFormat.apply(tick), 11, t.textMuted(), "middle", false);
         }
         return svg.toString();
+    }
+
+    private static void backdrop(Svg svg, double[] x, double[] values, Scale sx, double top, double bottom, Theme t) {
+        double[][] pts = downsample(x, values, (int) (WIDTH - LEFT - RIGHT));
+        double lo = Double.POSITIVE_INFINITY;
+        double hi = Double.NEGATIVE_INFINITY;
+        int n = 0;
+        for (double v : pts[1]) {
+            if (!Double.isNaN(v)) {
+                lo = Math.min(lo, v);
+                hi = Math.max(hi, v);
+                n++;
+            }
+        }
+        if (n < 2 || hi <= lo) {
+            return;
+        }
+        double[] px = new double[n];
+        double[] py = new double[n];
+        int k = 0;
+        for (int i = 0; i < pts[0].length; i++) {
+            if (!Double.isNaN(pts[1][i])) {
+                px[k] = sx.at(pts[0][i]);
+                // The lowest point keeps a sliver of area, the highest stops short of the panel title.
+                py[k] = bottom - (0.08 + 0.82 * (pts[1][i] - lo) / (hi - lo)) * (bottom - top);
+                k++;
+            }
+        }
+        svg.area(px, py, bottom, t.textMuted(), 0.16);
     }
 
     private static void bandLabels(Svg svg, List<Band> bands, Scale sx, double top, Theme t) {
