@@ -57,7 +57,7 @@ public class StravaHarvest {
      * says stop. Cheap when everything is already harvested: one list call.
      */
     public synchronized Progress run() {
-        if (!strava.configured() || clock.instant().isBefore(pausedUntil)) {
+        if (!strava.configured() || clock.instant().isBefore(pausedUntil) || ended().isPresent()) {
             return progress();
         }
         try {
@@ -71,9 +71,22 @@ public class StravaHarvest {
             pausedUntil = e.retryAfter();
             LOG.info("strava harvest paused until {}", pausedUntil);
         } catch (RuntimeException e) {
-            LOG.warn("strava harvest step failed: {}", e.getMessage());
+            String m = String.valueOf(e.getMessage());
+            if (m.startsWith("Strava 402") || m.startsWith("Strava 403")) {
+                // The subscription that opens segment efforts is over: stop asking, local timing carries on.
+                setting("strava.ended", java.time.LocalDate.ofInstant(clock.instant(), clock.getZone()).toString());
+                LOG.info("strava refuses segment efforts ({}): harvest stopped, segments are timed locally", m);
+            } else {
+                LOG.warn("strava harvest step failed: {}", m);
+            }
         }
         return progress();
+    }
+
+    /** The day Strava stopped giving segment efforts, if it did. */
+    public java.util.Optional<java.time.LocalDate> ended() {
+        return jdbc.queryForList("SELECT value FROM setting WHERE key = 'strava.ended'", String.class).stream()
+                .findFirst().map(java.time.LocalDate::parse);
     }
 
     /**

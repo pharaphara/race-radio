@@ -65,6 +65,14 @@ public final class SessionReview {
     /** The local archive, for the morning before and what is planned next; null in tests that do not need it. */
     private io.github.pharaphara.raceradio.bot.archive.Archive archive;
 
+    private io.github.pharaphara.raceradio.bot.strava.LocalSegments segments;
+
+    /** Gives the review the segments timed locally, so a record on a regular climb is mentioned. */
+    public SessionReview withSegments(io.github.pharaphara.raceradio.bot.strava.LocalSegments segments) {
+        this.segments = segments;
+        return this;
+    }
+
     /** Gives the review the local archive: the morning before the session and what comes next. */
     public SessionReview withArchive(io.github.pharaphara.raceradio.bot.archive.Archive archive) {
         this.archive = archive;
@@ -245,7 +253,16 @@ public final class SessionReview {
                 LOG.warn("archive context for {} unavailable: {}", a.id(), e.getMessage());
             }
         }
-        return new SessionFacts.Context(rpe, feel, temp, moving, cadence, cadenceUnit, List.copyOf(peaks), morning, next);
+        List<String> notable = List.of();
+        if (segments != null && a.start() != null) {
+            try {
+                segments.scan(a.id(), a.start().toLocalDate(), streams);
+                notable = segments.notable(a.id(), 3);
+            } catch (RuntimeException e) {
+                LOG.warn("segments of {} unavailable: {}", a.id(), e.getMessage());
+            }
+        }
+        return new SessionFacts.Context(rpe, feel, temp, moving, cadence, cadenceUnit, List.copyOf(peaks), morning, next, notable);
     }
 
     /** Mean of positive readings over [from, to), rounded; null when there are none. */
@@ -397,7 +414,8 @@ public final class SessionReview {
                    (weighted power, intensity, load, variability explained by the climbing, heat when
                    temperature is high), **Effort de pointe** (the best five or twenty minutes and the heart
                    rate they cost), **Technique** (cadence or stride when it stands out), **Forme du jour**
-                   (that morning against the week, the effort rating and feel entered on the watch).
+                   (that morning against the week, the effort rating and feel entered on the watch),
+                   **Segments** (the notable passages given: a record first).
                 3. **Et ensuite** : the next session on the calendar if there is one, and one concrete
                    recommendation for it.
                 Rules:

@@ -32,6 +32,7 @@ public class Schedules implements SchedulingConfigurer {
     private final io.github.pharaphara.raceradio.bot.archive.Archive archive;
     private final io.github.pharaphara.raceradio.bot.strava.StravaHarvest strava;
     private final io.github.pharaphara.raceradio.bot.commands.QuickReplies replies;
+    private final io.github.pharaphara.raceradio.bot.strava.LocalSegments segments;
 
     private final String once;
 
@@ -41,7 +42,9 @@ public class Schedules implements SchedulingConfigurer {
                      io.github.pharaphara.raceradio.bot.plan.Adapter adapter,
                      io.github.pharaphara.raceradio.bot.archive.Archive archive,
                      io.github.pharaphara.raceradio.bot.strava.StravaHarvest strava,
-                     io.github.pharaphara.raceradio.bot.commands.QuickReplies replies) {
+                     io.github.pharaphara.raceradio.bot.commands.QuickReplies replies,
+                     io.github.pharaphara.raceradio.bot.strava.LocalSegments segments) {
+        this.segments = segments;
         this.replies = replies;
         this.strava = strava;
         this.archive = archive;
@@ -69,7 +72,11 @@ public class Schedules implements SchedulingConfigurer {
         registrar.addFixedDelayTask(this::watch, java.time.Duration.ofMinutes(props.schedule().watchEveryMinutes()));
         // The local archive: a year of history once, in the background, then the last month every night.
         registrar.addCronTask(new CronTask(() -> archive.refresh(30), daily(LocalTime.of(3, 45))));
-        Thread.ofVirtual().name("archive-backfill").start(archive::backfill);
+        Thread.ofVirtual().name("archive-backfill").start(() -> {
+            archive.backfill();
+            scanSegments(Integer.MAX_VALUE);
+        });
+        registrar.addCronTask(new CronTask(() -> scanSegments(500), daily(LocalTime.of(4, 15))));
         // Strava segments, harvested within the read quota: a step every quarter hour, idle once done.
         registrar.addFixedDelayTask(strava::run, java.time.Duration.ofMinutes(15));
     }
@@ -105,6 +112,18 @@ public class Schedules implements SchedulingConfigurer {
         }
     }
 
+    /** Times the segments of archived sessions not scanned yet; local only. */
+    void scanSegments(int max) {
+        try {
+            int n = segments.scanPending(max);
+            if (n > 0) {
+                LOG.info("segments: {} session(s) scanned", n);
+            }
+        } catch (RuntimeException e) {
+            LOG.warn("segment scan failed: {}", e.getMessage());
+        }
+    }
+
     void watch() {
         try {
             int n = watcher.poll();
@@ -112,6 +131,7 @@ public class Schedules implements SchedulingConfigurer {
                 LOG.info("{} session(s) reviewed", n);
                 // The review just cached the streams: archiving the new session costs two list calls.
                 archive.refresh(3);
+                scanSegments(20);
             }
         } catch (RuntimeException e) {
             LOG.warn("looking for new activities failed: {}", e.getMessage());

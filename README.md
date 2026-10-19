@@ -110,7 +110,7 @@ each activity's streams once: questions about any period are answered without ca
 | `/seance demain cap facile` | one workout, proposed and calibrated, then Publier, Modifier or Annuler |
 | `/semaine` · `/semaine demain bloc seuil` | a whole week, proposed day by day under the same rules, published only on request |
 | `/tendance vélo efficacité 12 mois` | one metric over months, from the archive (`/tendance` alone lists them) |
-| `/segment` · `/segment jonte` | your regular segments, and one segment's history |
+| `/segment` · `/segment jonte` · `/segment nouveau 2026-10-16 25 45 Montée du col` | your regular segments, one segment's history, and a segment of your own from a stretch of an activity; passages are timed locally from GPS, Strava or not |
 | `/fusionner i123 i124` | merge an activity split in two, after confirmation |
 | `/note …` · `/notes` · `/oubli n` | facts the coach keeps in mind |
 | `/cout` · `/dernierenvoi` | what the model cost, what was sent |

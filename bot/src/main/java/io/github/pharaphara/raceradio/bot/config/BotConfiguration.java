@@ -125,8 +125,31 @@ public class BotConfiguration {
     @Bean
     io.github.pharaphara.raceradio.bot.strava.Segments segments(org.springframework.jdbc.core.JdbcTemplate jdbc,
                                                               io.github.pharaphara.raceradio.bot.strava.StravaHarvest harvest,
-                                                              TelegramClient telegram) {
-        return new io.github.pharaphara.raceradio.bot.strava.Segments(jdbc, harvest, telegram, props.telegram().allowedChatId());
+                                                              TelegramClient telegram,
+                                                              io.github.pharaphara.raceradio.bot.strava.LocalSegments local,
+                                                              io.github.pharaphara.raceradio.bot.strava.SegmentLibrary library,
+                                                              io.github.pharaphara.raceradio.bot.archive.StreamCache streams, Clock clock) {
+        return new io.github.pharaphara.raceradio.bot.strava.Segments(jdbc, harvest, telegram, props.telegram().allowedChatId())
+                .withLocal(local, library, streams, clock);
+    }
+
+    @Bean
+    io.github.pharaphara.raceradio.bot.strava.LocalSegments localSegments(org.springframework.jdbc.core.JdbcTemplate jdbc,
+                                                                        io.github.pharaphara.raceradio.bot.strava.SegmentLibrary library,
+                                                                        io.github.pharaphara.raceradio.bot.archive.StreamCache streams, Clock clock) {
+        return new io.github.pharaphara.raceradio.bot.strava.LocalSegments(jdbc, library, streams, clock);
+    }
+
+    @Bean
+    io.github.pharaphara.raceradio.bot.strava.SegmentLibrary segmentLibrary(org.springframework.jdbc.core.JdbcTemplate jdbc) {
+        return new io.github.pharaphara.raceradio.bot.strava.SegmentLibrary(jdbc);
+    }
+
+    @Bean
+    io.github.pharaphara.raceradio.bot.strava.Calibration calibration(org.springframework.jdbc.core.JdbcTemplate jdbc,
+                                                                    io.github.pharaphara.raceradio.bot.strava.SegmentLibrary library,
+                                                                    io.github.pharaphara.raceradio.bot.archive.StreamCache streams) {
+        return new io.github.pharaphara.raceradio.bot.strava.Calibration(jdbc, library, streams);
     }
 
     @Bean
@@ -151,8 +174,10 @@ public class BotConfiguration {
     @Bean
     SessionReview sessionReview(IntervalsClient intervals, IntervalsWriter writer, CoachModel model, DecisionLog decisions, Clock clock,
                                 io.github.pharaphara.raceradio.bot.archive.StreamCache streams,
-                                io.github.pharaphara.raceradio.bot.archive.Archive archive) {
-        return new SessionReview(intervals, writer, model, decisions, props.model().reviewEffort(), clock, streams::get).withArchive(archive);
+                                io.github.pharaphara.raceradio.bot.archive.Archive archive,
+                                io.github.pharaphara.raceradio.bot.strava.LocalSegments segments) {
+        return new SessionReview(intervals, writer, model, decisions, props.model().reviewEffort(), clock, streams::get)
+                .withArchive(archive).withSegments(segments);
     }
 
     @Bean

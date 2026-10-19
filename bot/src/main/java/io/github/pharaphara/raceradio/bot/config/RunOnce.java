@@ -23,6 +23,7 @@ import java.time.LocalDate;
  *   <li>{@code --race-radio.once=week:<request>}: the draft of a week, shown in full, never published.</li>
  *   <li>{@code --race-radio.once=archive}: fills the local archive, as the service does in the background.</li>
  *   <li>{@code --race-radio.once=strava}: one step of the Strava segment harvest.</li>
+ *   <li>{@code --race-radio.once=calibrate}: local segment timing against Strava's, on every archived pair.</li>
  *   <li>{@code --race-radio.once=note:<text>}: keeps a note about the athlete, as /note does.</li>
  *   <li>{@code --race-radio.once=ask:<message>}: the coach's answer to a message, its buttons and action, nothing sent.</li>
  *   <li>{@code --race-radio.once=trend:<metric>}: one metric over twelve months, from the archive.</li>
@@ -44,6 +45,7 @@ public class RunOnce implements ApplicationRunner {
     private final io.github.pharaphara.raceradio.bot.strava.StravaHarvest strava;
     private final io.github.pharaphara.raceradio.bot.chat.Conversation conversation;
     private final io.github.pharaphara.raceradio.bot.store.Conversations memory;
+    private final io.github.pharaphara.raceradio.bot.strava.Calibration calibration;
 
     public RunOnce(@Value("${race-radio.once:}") String once, MorningCheck morning, SessionReview review,
                    IntervalsClient intervals, ConfigurableApplicationContext context, RaceRadioProperties props,
@@ -53,7 +55,9 @@ public class RunOnce implements ApplicationRunner {
                    io.github.pharaphara.raceradio.bot.archive.Trends trends,
                    io.github.pharaphara.raceradio.bot.strava.StravaHarvest strava,
                    io.github.pharaphara.raceradio.bot.chat.Conversation conversation,
-                   io.github.pharaphara.raceradio.bot.store.Conversations memory) {
+                   io.github.pharaphara.raceradio.bot.store.Conversations memory,
+                   io.github.pharaphara.raceradio.bot.strava.Calibration calibration) {
+        this.calibration = calibration;
         this.conversation = conversation;
         this.memory = memory;
         this.strava = strava;
@@ -99,6 +103,8 @@ public class RunOnce implements ApplicationRunner {
             } catch (java.io.IOException e) {
                 throw new java.io.UncheckedIOException(e);
             }
+        } else if (once.equals("calibrate")) {
+            System.out.println("\n" + calibration.run().text());
         } else if (once.equals("strava")) {
             System.out.println("\nstrava: " + strava.run());
         } else if (once.equals("archive")) {
@@ -133,7 +139,7 @@ public class RunOnce implements ApplicationRunner {
             byte[] chart = morning.fitnessChart();
             save("fitness", chart == null ? java.util.List.of() : java.util.List.of(chart));
         } else {
-            throw new IllegalArgumentException("race-radio.once must be morning, fitness, archive, strava, note:<text>, ask:<message>, trend:<metric>, "
+            throw new IllegalArgumentException("race-radio.once must be morning, fitness, archive, strava, calibrate, note:<text>, ask:<message>, trend:<metric>, "
                     + "review:<activity id>, photo:<file>, session:<request> or week:<request>");
         }
         System.exit(SpringApplication.exit(context, () -> 0));
