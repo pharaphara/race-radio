@@ -51,7 +51,7 @@ public final class Adapter {
     }
 
     public Optional<Result> adapt(Verdict verdict) {
-        if (verdict == Verdict.GREEN || plans.mode() == Plans.Mode.OFF) {
+        if (verdict == Verdict.GREEN || plans.mode() == Plans.Mode.ANALYSE) {
             return Optional.empty();
         }
         LocalDate today = LocalDate.now(clock);

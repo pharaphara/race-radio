@@ -17,5 +17,6 @@ read from cache, so it stays compact. Each rule carries its register:
 | strength.md | Crossfit and strength sessions |
 | periodization.md | plans, phases, taper, feasibility |
 | sessions.md | how to judge one session against its plan |
+| nutrition.md | fuelling and drinking for long sessions, briefings, heat |
 
 Adapted in part from the open Section 11 protocol (CrankAddict, MIT, v11.75); see REFERENCES.md.

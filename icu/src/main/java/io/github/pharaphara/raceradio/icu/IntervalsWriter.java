@@ -126,7 +126,18 @@ public final class IntervalsWriter {
      * @throws WorkoutNotUnderstood   when the calendar's reading differs from the intent
      */
     public Optional<CalendarEvent> publishWorkout(LocalDate day, Workout workout) {
-        String text = WorkoutText.render(workout);
+        return publishWorkout(day, workout, null);
+    }
+
+    /**
+     * Same, with a note on how to ride or run it. The note goes above the steps: Intervals.icu then
+     * keeps it as the workout's own description (checked on the real calendar: the steps it reads
+     * are the same with or without it), where a note below the steps would be dropped.
+     */
+    public Optional<CalendarEvent> publishWorkout(LocalDate day, Workout workout, String note) {
+        String steps = WorkoutText.render(workout);
+        String clean = WorkoutText.note(note);
+        String text = clean.isEmpty() ? steps : clean + "\n\n" + steps;
         if (!client.athlete().pushesWorkoutsToGarmin()) {
             throw new IllegalStateException("Intervals.icu does not push workouts to Garmin for this athlete "
                     + "(icu_garmin_upload_workouts is off): a published workout would never reach the watch");

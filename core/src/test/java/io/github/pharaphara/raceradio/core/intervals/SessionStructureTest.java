@@ -39,4 +39,26 @@ class SessionStructureTest {
         assertThat(r.againstPlan()).isEmpty();
         assertThat(r.model()).isEqualTo(IntervalDetector.MODEL);
     }
+
+    @Test
+    void lapsAreReadThroughThePlanAndWarmUpJogsLeaveTheSummary() {
+        // Speeds in m/s: two easy jogging laps, then 5 reps of about 4 min at 4.0 m/s with recoveries,
+        // the first slower because it climbed. The plan holds the 5 reps only.
+        PlannedStep rep = new PlannedStep(247, 4.0, 4.1);
+        List<Block> laps = List.of(new Block(0, 348, 2.95), new Block(348, 686, 2.96),
+                new Block(700, 966, 3.77), new Block(1100, 1352, 3.95), new Block(1500, 1746, 4.05),
+                new Block(1900, 2151, 3.98), new Block(2300, 2547, 3.99));
+        SessionStructure.Result r = SessionStructure.of(laps, List.of(rep, rep, rep, rep, rep), Samples.constant(3.5, 2600), 2.7);
+        assertThat(r.source()).isEqualTo(SessionStructure.Source.DEVICE_LAPS);
+        assertThat(r.work()).hasSize(5);
+        assertThat(r.repetitions()).hasSize(1).first().satisfies(g -> assertThat(g).hasSize(5));
+    }
+
+    @Test
+    void aRepHeldMuchLongerOnPurposeStandsAlone() {
+        PlannedStep rep = new PlannedStep(480, 3.55, 3.65);
+        List<Block> laps = List.of(new Block(600, 1080, 3.57), new Block(1200, 1682, 3.62), new Block(1800, 2696, 3.70));
+        SessionStructure.Result r = SessionStructure.of(laps, List.of(rep, rep, rep), Samples.constant(3.2, 2800), 2.7);
+        assertThat(r.repetitions()).extracting(List::size).containsExactly(2, 1);
+    }
 }

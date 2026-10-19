@@ -153,3 +153,33 @@ CREATE TABLE IF NOT EXISTS strava_effort (
     json             TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS strava_effort_segment ON strava_effort (segment_id, day);
+
+-- What is planned on the calendar, cached at each archive refresh and after each publication,
+-- so a prescription knows what is already there without asking Intervals.icu again.
+CREATE TABLE IF NOT EXISTS archive_event (
+    id          INTEGER PRIMARY KEY,
+    day         TEXT NOT NULL,
+    json        TEXT NOT NULL,
+    fetched_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS archive_event_day ON archive_event (day);
+
+-- Passages over segments timed locally from the GPS track, without Strava.
+CREATE TABLE IF NOT EXISTS local_effort (
+    activity_id  TEXT NOT NULL,
+    segment_id   INTEGER NOT NULL,
+    start_index  INTEGER NOT NULL,
+    day          TEXT NOT NULL,
+    seconds      REAL NOT NULL,
+    watts        REAL,
+    heart_rate   REAL,
+    PRIMARY KEY (activity_id, segment_id, start_index)
+);
+CREATE INDEX IF NOT EXISTS local_effort_segment ON local_effort (segment_id, day);
+
+-- Which activities were scanned for segments, and against how many segments.
+CREATE TABLE IF NOT EXISTS segment_scan (
+    activity_id  TEXT PRIMARY KEY,
+    segments     INTEGER NOT NULL,
+    scanned_at   TEXT NOT NULL
+);

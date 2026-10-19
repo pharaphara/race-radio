@@ -134,10 +134,85 @@ public class Archive {
         LocalDate today = LocalDate.now(clock);
         try {
             sync(today.minusDays(days), today);
+            syncEvents();
             computePending(200, Duration.ofSeconds(2));
         } catch (RuntimeException e) {
             LOG.warn("archive refresh failed: {}", e.toString());
         }
+    }
+
+    /** Days ahead kept in the calendar cache. */
+    static final int EVENTS_AHEAD = 14;
+
+    /** Replaces the cached calendar from today on. One call. */
+    public void syncEvents() {
+        LocalDate today = LocalDate.now(clock);
+        LocalDate to = today.plusDays(EVENTS_AHEAD);
+        List<JsonNode> events = intervals.eventsRaw(today, to);
+        String now = clock.instant().toString();
+        jdbc.update("DELETE FROM archive_event WHERE day >= ?", today.toString());
+        for (JsonNode e : events) {
+            String start = e.path("start_date_local").asString();
+            if (e.path("id").isNumber() && start.length() >= 10) {
+                jdbc.update("INSERT OR REPLACE INTO archive_event (id, day, json, fetched_at) VALUES (?, ?, ?, ?)",
+                        e.path("id").asLong(), start.substring(0, 10), e.toString(), now);
+            }
+        }
+    }
+
+    /**
+     * What is planned from {@code from} on, one line per entry, from the cache: day, sport, name,
+     * planned duration, and whether race-radio wrote it. Notes and races are included.
+     */
+    public List<String> planned(LocalDate from, int days) {
+        return jdbc.queryForList("SELECT day, json_extract(json, '$.category') AS cat, json_extract(json, '$.type') AS type, "
+                        + "json_extract(json, '$.name') AS name, json_extract(json, '$.moving_time') AS t, "
+                        + "json_extract(json, '$.external_id') AS ext FROM archive_event WHERE day >= ? AND day < ? ORDER BY day",
+                from.toString(), from.plusDays(days).toString()).stream()
+                .filter(r -> !"NOTE".equals(r.get("cat")) || !String.valueOf(r.get("ext")).startsWith("race-radio-"))
+                .map(r -> r.get("day") + " " + r.get("cat") + (r.get("type") == null ? "" : " " + r.get("type"))
+                        + " « " + r.get("name") + " »" + (r.get("t") instanceof Number n && n.intValue() > 0 ? " " + n.intValue() / 60 + " min" : "")
+                        + (String.valueOf(r.get("ext")).startsWith("race-radio-") ? " (race-radio)" : ""))
+                .toList();
+    }
+
+    /**
+     * This morning against the seven before, from the wellness archive: heart-rate variability,
+     * resting heart rate and sleep. Empty when today is not archived yet.
+     */
+    public Optional<String> morning() {
+        return morning(LocalDate.now(clock));
+    }
+
+    /** That day's morning against the seven before it. */
+    public Optional<String> morning(LocalDate today) {
+        List<Map<String, Object>> rows = jdbc.queryForList("SELECT day, json_extract(json, '$.hrv') AS hrv, "
+                + "json_extract(json, '$.restingHR') AS rhr, json_extract(json, '$.sleepSecs') AS sleep "
+                + "FROM archive_wellness WHERE day BETWEEN ? AND ? ORDER BY day", today.minusDays(7).toString(), today.toString());
+        Map<String, Object> now = rows.stream().filter(r -> today.toString().equals(r.get("day"))).findFirst().orElse(null);
+        if (now == null) {
+            return Optional.empty();
+        }
+        List<Map<String, Object>> before = rows.stream().filter(r -> !today.toString().equals(r.get("day"))).toList();
+        StringBuilder b = new StringBuilder("morning of " + today + ":");
+        appendAgainst(b, "HRV", now.get("hrv"), before, "hrv", 1, " ms");
+        appendAgainst(b, "resting HR", now.get("rhr"), before, "rhr", 1, " bpm");
+        appendAgainst(b, "sleep", now.get("sleep"), before, "sleep", 3600, " h");
+        return Optional.of(b.toString());
+    }
+
+    private static void appendAgainst(StringBuilder b, String label, Object value, List<Map<String, Object>> before,
+                                      String key, double scale, String unit) {
+        if (!(value instanceof Number v)) {
+            return;
+        }
+        double avg = before.stream().map(r -> r.get(key)).filter(x -> x instanceof Number)
+                .mapToDouble(x -> ((Number) x).doubleValue()).average().orElse(Double.NaN);
+        b.append(String.format(java.util.Locale.ROOT, " %s %.1f%s", label, v.doubleValue() / scale, unit));
+        if (!Double.isNaN(avg)) {
+            b.append(String.format(java.util.Locale.ROOT, " (7-day average %.1f%s)", avg / scale, unit));
+        }
+        b.append(';');
     }
 
     /** An activity changed upstream (merged, or deleted by a merge): its local copies are dropped and redone at the next sync. */
@@ -151,12 +226,14 @@ public class Archive {
     public List<String> recent(int days) {
         LocalDate from = LocalDate.now(clock).minusDays(days);
         return jdbc.queryForList("SELECT day, type, json_extract(json, '$.name') AS name, json_extract(json, '$.moving_time') AS t, "
-                        + "json_extract(json, '$.icu_training_load') AS load, json_extract(json, '$.icu_intensity') AS intensity "
+                        + "json_extract(json, '$.icu_training_load') AS load, json_extract(json, '$.icu_intensity') AS intensity, "
+                        + "json_extract(json, '$.icu_rpe') AS rpe "
                         + "FROM archive_activity WHERE day >= ? ORDER BY day", from.toString()).stream()
                 .map(r -> r.get("day") + " " + r.get("type") + " « " + r.get("name") + " » "
                         + (r.get("t") instanceof Number n ? n.intValue() / 60 + " min" : "")
                         + (r.get("load") instanceof Number l ? ", charge " + l.intValue() : "")
-                        + (r.get("intensity") instanceof Number i ? ", intensité " + i.intValue() + " %" : ""))
+                        + (r.get("intensity") instanceof Number i ? ", intensité " + i.intValue() + " %" : "")
+                        + (r.get("rpe") instanceof Number p && p.intValue() > 0 ? ", RPE Garmin " + p.intValue() + "/10" : ""))
                 .toList();
     }
 

@@ -20,8 +20,12 @@ import java.time.LocalDate;
  *   <li>{@code --race-radio.once=morning}: the morning call.</li>
  *   <li>{@code --race-radio.once=review:<activity id>}: the review of one activity of the last year.</li>
  *   <li>{@code --race-radio.once=session:<request>}: the draft of one workout, shown, never published.</li>
+ *   <li>{@code --race-radio.once=week:<request>}: the draft of a week, shown in full, never published.</li>
  *   <li>{@code --race-radio.once=archive}: fills the local archive, as the service does in the background.</li>
  *   <li>{@code --race-radio.once=strava}: one step of the Strava segment harvest.</li>
+ *   <li>{@code --race-radio.once=calibrate}: local segment timing against Strava's, on every archived pair.</li>
+ *   <li>{@code --race-radio.once=note:<text>}: keeps a note about the athlete, as /note does.</li>
+ *   <li>{@code --race-radio.once=ask:<message>}: the coach's answer to a message, its buttons and action, nothing sent.</li>
  *   <li>{@code --race-radio.once=trend:<metric>}: one metric over twelve months, from the archive.</li>
  * </ul>
  */
@@ -39,6 +43,9 @@ public class RunOnce implements ApplicationRunner {
     private final io.github.pharaphara.raceradio.bot.archive.Archive archive;
     private final io.github.pharaphara.raceradio.bot.archive.Trends trends;
     private final io.github.pharaphara.raceradio.bot.strava.StravaHarvest strava;
+    private final io.github.pharaphara.raceradio.bot.chat.Conversation conversation;
+    private final io.github.pharaphara.raceradio.bot.store.Conversations memory;
+    private final io.github.pharaphara.raceradio.bot.strava.Calibration calibration;
 
     public RunOnce(@Value("${race-radio.once:}") String once, MorningCheck morning, SessionReview review,
                    IntervalsClient intervals, ConfigurableApplicationContext context, RaceRadioProperties props,
@@ -46,7 +53,13 @@ public class RunOnce implements ApplicationRunner {
                    io.github.pharaphara.raceradio.bot.plan.SessionCreator sessions,
                    io.github.pharaphara.raceradio.bot.archive.Archive archive,
                    io.github.pharaphara.raceradio.bot.archive.Trends trends,
-                   io.github.pharaphara.raceradio.bot.strava.StravaHarvest strava) {
+                   io.github.pharaphara.raceradio.bot.strava.StravaHarvest strava,
+                   io.github.pharaphara.raceradio.bot.chat.Conversation conversation,
+                   io.github.pharaphara.raceradio.bot.store.Conversations memory,
+                   io.github.pharaphara.raceradio.bot.strava.Calibration calibration) {
+        this.calibration = calibration;
+        this.conversation = conversation;
+        this.memory = memory;
         this.strava = strava;
         this.archive = archive;
         this.trends = trends;
@@ -76,6 +89,13 @@ public class RunOnce implements ApplicationRunner {
             SessionReview.Outcome o = review.review(a, false);
             print(o.message(), o.worded(), "structure " + o.facts().structureSource() + ", " + o.facts().repetitions());
             save(id, o.images());
+        } else if (once.startsWith("facts:")) {
+            String id = once.substring("facts:".length());
+            ActivitySummary a = intervals.activities(LocalDate.now().minusYears(1), LocalDate.now()).stream()
+                    .filter(x -> x.id().equals(id)).findFirst()
+                    .orElseThrow(() -> new IllegalArgumentException("no activity " + id + " in the last year"));
+            System.out.println("\n" + tools.jackson.databind.json.JsonMapper.builder().build().writerWithDefaultPrettyPrinter()
+                    .writeValueAsString(review.facts(a)));
         } else if (once.startsWith("photo:")) {
             try {
                 byte[] photo = java.nio.file.Files.readAllBytes(java.nio.file.Path.of(once.substring("photo:".length())));
@@ -83,6 +103,8 @@ public class RunOnce implements ApplicationRunner {
             } catch (java.io.IOException e) {
                 throw new java.io.UncheckedIOException(e);
             }
+        } else if (once.equals("calibrate")) {
+            System.out.println("\n" + calibration.run().text());
         } else if (once.equals("strava")) {
             System.out.println("\nstrava: " + strava.run());
         } else if (once.equals("archive")) {
@@ -97,12 +119,28 @@ public class RunOnce implements ApplicationRunner {
             save("trend-" + metric.key(), answer.chart() == null ? java.util.List.of() : java.util.List.of(answer.chart()));
         } else if (once.startsWith("session:")) {
             System.out.println("\n" + sessions.prepare("/seance " + once.substring("session:".length())).message());
+        } else if (once.startsWith("note:")) {
+            long id = memory.addNote(java.time.Instant.now(), once.substring("note:".length()).strip());
+            System.out.println("\nnote " + id + " kept");
+        } else if (once.startsWith("ask:")) {
+            var r = conversation.reply(once.substring("ask:".length()));
+            System.out.println("\n" + (r.text() == null ? "(answered by the program)" : r.text()));
+            r.suggestions().forEach(s -> System.out.println("[bouton] " + s));
+            if (r.action() != null) {
+                System.out.println("[action] " + r.action().kind() + " " + r.action().request());
+            }
+        } else if (once.startsWith("week:")) {
+            var p = sessions.prepareWeek("/semaine " + once.substring("week:".length()));
+            System.out.println("\n" + p.message());
+            if (p.pending() != null) {
+                System.out.println("\n----- détail\n" + sessions.detail(p.pending()));
+            }
         } else if (once.equals("fitness")) {
             byte[] chart = morning.fitnessChart();
             save("fitness", chart == null ? java.util.List.of() : java.util.List.of(chart));
         } else {
-            throw new IllegalArgumentException("race-radio.once must be morning, fitness, archive, strava, trend:<metric>, "
-                    + "review:<activity id>, photo:<file> or session:<request>");
+            throw new IllegalArgumentException("race-radio.once must be morning, fitness, archive, strava, calibrate, note:<text>, ask:<message>, trend:<metric>, "
+                    + "review:<activity id>, photo:<file>, session:<request> or week:<request>");
         }
         System.exit(SpringApplication.exit(context, () -> 0));
     }

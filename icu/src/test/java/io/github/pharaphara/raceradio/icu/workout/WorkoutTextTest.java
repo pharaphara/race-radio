@@ -68,4 +68,13 @@ class WorkoutTextTest {
                 new Step(new Length.Time(300), new Target.PowerZone(1), null, "souple, mains en bas")))));
         assertThat(WorkoutText.problems(w)).isEmpty();
     }
+
+    @Test
+    void aNoteBecomesOneParagraphTheParserCannotTakeForAStep() {
+        assertThat(WorkoutText.note(null)).isEmpty();
+        assertThat(WorkoutText.note("- Pars doucement.\n- 10m Z2\nRéussi si la dernière est la meilleure, 3x"))
+                .isEqualTo("Pars doucement. - 10m Z2 Réussi si la dernière est la meilleure, 3 fois")
+                .doesNotContain("\n");
+        assertThat(WorkoutText.note("mot ".repeat(400))).hasSizeLessThanOrEqualTo(WorkoutText.MAX_NOTE + 1).endsWith("…");
+    }
 }

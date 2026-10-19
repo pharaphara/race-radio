@@ -94,14 +94,96 @@ public class TelegramClient {
         }
     }
 
+    /**
+     * Sends text written by the model with light formatting (bold titles and figures, bullet lines),
+     * as Telegram HTML. Falls back to the plain text if Telegram refuses the markup.
+     */
+    public void sendRich(long chatId, String text) {
+        sendRichWithButtons(chatId, text, List.of());
+    }
+
+    /** Same, with buttons under the last part, one map per row. */
+    public void sendRichWithButtons(long chatId, String text, List<Map<String, String>> rows) {
+        List<List<Map<String, String>>> keyboard = keyboard(rows);
+        List<String> parts = split(text);
+        for (int i = 0; i < parts.size(); i++) {
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("chat_id", chatId);
+            body.put("text", html(parts.get(i)));
+            body.put("parse_mode", "HTML");
+            if (i == parts.size() - 1 && !keyboard.isEmpty()) {
+                body.put("reply_markup", Map.of("inline_keyboard", keyboard));
+            }
+            try {
+                call("sendMessage", body, Duration.ofSeconds(20));
+            } catch (IllegalStateException e) {
+                body.put("text", plain(parts.get(i)));
+                body.remove("parse_mode");
+                call("sendMessage", body, Duration.ofSeconds(20));
+            }
+        }
+    }
+
+    /**
+     * The model's light markdown as Telegram HTML: everything escaped first, then only **bold**,
+     * heading lines and bullet lines are turned into markup. Anything else stays text.
+     */
+    static String html(String text) {
+        StringBuilder out = new StringBuilder();
+        for (String line : text.split("\n", -1)) {
+            String l = line.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+            String heading = l.replaceFirst("^#{1,6}\\s+(.+)$", "<b>$1</b>");
+            l = heading.equals(l) ? l : heading.replace("**", "");
+            l = l.replaceFirst("^\\s*[-*]\\s+", "• ");
+            l = l.replaceAll("\\*\\*([^*]+?)\\*\\*", "<b>$1</b>");
+            out.append(l).append('\n');
+        }
+        return out.substring(0, out.length() - 1);
+    }
+
+    /** The same text without markup, for the fallback. */
+    static String plain(String text) {
+        return text.replaceAll("(?m)^#{1,6}\\s+", "").replaceAll("(?m)^\\s*[-*]\\s+", "• ").replace("**", "");
+    }
+
+    private static List<List<Map<String, String>>> keyboard(List<Map<String, String>> rows) {
+        List<List<Map<String, String>>> keyboard = new ArrayList<>();
+        for (Map<String, String> r : rows) {
+            List<Map<String, String>> row = new ArrayList<>();
+            r.forEach((label, data) -> row.add(Map.of("text", label, "callback_data", data)));
+            if (!row.isEmpty()) {
+                keyboard.add(row);
+            }
+        }
+        return keyboard;
+    }
+
     /** Sends text with one row of buttons; each button returns its {@code data} when pressed. */
     public void sendWithButtons(long chatId, String text, Map<String, String> labelToData) {
-        List<Map<String, String>> row = new ArrayList<>();
-        labelToData.forEach((label, data) -> row.add(Map.of("text", label, "callback_data", data)));
+        sendWithButtonRows(chatId, text, List.of(labelToData));
+    }
+
+    /**
+     * Sends text with buttons, one map per row, in order. A text longer than one message goes out
+     * in several, the buttons under the last.
+     */
+    public void sendWithButtonRows(long chatId, String text, List<Map<String, String>> rows) {
+        List<List<Map<String, String>>> keyboard = new ArrayList<>();
+        for (Map<String, String> r : rows) {
+            List<Map<String, String>> row = new ArrayList<>();
+            r.forEach((label, data) -> row.add(Map.of("text", label, "callback_data", data)));
+            if (!row.isEmpty()) {
+                keyboard.add(row);
+            }
+        }
+        List<String> parts = split(text);
+        for (int i = 0; i < parts.size() - 1; i++) {
+            call("sendMessage", Map.of("chat_id", chatId, "text", parts.get(i)), Duration.ofSeconds(20));
+        }
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("chat_id", chatId);
-        body.put("text", text.length() > MAX_MESSAGE ? text.substring(0, MAX_MESSAGE) : text);
-        body.put("reply_markup", Map.of("inline_keyboard", List.of(row)));
+        body.put("text", parts.getLast());
+        body.put("reply_markup", Map.of("inline_keyboard", keyboard));
         call("sendMessage", body, Duration.ofSeconds(20));
     }
 

@@ -31,6 +31,8 @@ public class Schedules implements SchedulingConfigurer {
     private final io.github.pharaphara.raceradio.bot.plan.Adapter adapter;
     private final io.github.pharaphara.raceradio.bot.archive.Archive archive;
     private final io.github.pharaphara.raceradio.bot.strava.StravaHarvest strava;
+    private final io.github.pharaphara.raceradio.bot.commands.QuickReplies replies;
+    private final io.github.pharaphara.raceradio.bot.strava.LocalSegments segments;
 
     private final String once;
 
@@ -39,7 +41,11 @@ public class Schedules implements SchedulingConfigurer {
                      io.github.pharaphara.raceradio.bot.plan.Planner planner, io.github.pharaphara.raceradio.bot.store.Plans plans,
                      io.github.pharaphara.raceradio.bot.plan.Adapter adapter,
                      io.github.pharaphara.raceradio.bot.archive.Archive archive,
-                     io.github.pharaphara.raceradio.bot.strava.StravaHarvest strava) {
+                     io.github.pharaphara.raceradio.bot.strava.StravaHarvest strava,
+                     io.github.pharaphara.raceradio.bot.commands.QuickReplies replies,
+                     io.github.pharaphara.raceradio.bot.strava.LocalSegments segments) {
+        this.segments = segments;
+        this.replies = replies;
         this.strava = strava;
         this.archive = archive;
         this.adapter = adapter;
@@ -66,7 +72,11 @@ public class Schedules implements SchedulingConfigurer {
         registrar.addFixedDelayTask(this::watch, java.time.Duration.ofMinutes(props.schedule().watchEveryMinutes()));
         // The local archive: a year of history once, in the background, then the last month every night.
         registrar.addCronTask(new CronTask(() -> archive.refresh(30), daily(LocalTime.of(3, 45))));
-        Thread.ofVirtual().name("archive-backfill").start(archive::backfill);
+        Thread.ofVirtual().name("archive-backfill").start(() -> {
+            archive.backfill();
+            scanSegments(Integer.MAX_VALUE);
+        });
+        registrar.addCronTask(new CronTask(() -> scanSegments(500), daily(LocalTime.of(4, 15))));
         // Strava segments, harvested within the read quota: a step every quarter hour, idle once done.
         registrar.addFixedDelayTask(strava::run, java.time.Duration.ofMinutes(15));
     }
@@ -83,12 +93,15 @@ public class Schedules implements SchedulingConfigurer {
                 LOG.warn("adjusting the day failed: {}", e.getMessage());
             }
             if (props.telegram().allowedChatId() != 0) {
+                boolean planned = archive.planned(java.time.LocalDate.now(props.zone()), 1).stream().anyMatch(l -> l.contains(" WORKOUT "));
+                java.util.List<java.util.Map<String, String>> rows = new java.util.ArrayList<>(replies.rows(java.util.List.of(
+                        planned ? "Comment exécuter ma séance du jour ?" : "Propose-moi une séance pour aujourd'hui")));
+                String text = o.message();
                 if (adjusted.isPresent()) {
-                    telegram.sendWithButtons(props.telegram().allowedChatId(), o.message() + "\n\n" + adjusted.get().summary(),
-                            java.util.Map.of("Annuler l'ajustement", "undo:" + adjusted.get().batch()));
-                } else {
-                    telegram.send(props.telegram().allowedChatId(), o.message());
+                    text += "\n\n" + adjusted.get().summary();
+                    rows.addFirst(java.util.Map.of("Annuler l'ajustement", "undo:" + adjusted.get().batch()));
                 }
+                telegram.sendWithButtonRows(props.telegram().allowedChatId(), text, rows);
             }
         } catch (RuntimeException e) {
             LOG.error("morning call failed: {}", e.getMessage());
@@ -99,6 +112,18 @@ public class Schedules implements SchedulingConfigurer {
         }
     }
 
+    /** Times the segments of archived sessions not scanned yet; local only. */
+    void scanSegments(int max) {
+        try {
+            int n = segments.scanPending(max);
+            if (n > 0) {
+                LOG.info("segments: {} session(s) scanned", n);
+            }
+        } catch (RuntimeException e) {
+            LOG.warn("segment scan failed: {}", e.getMessage());
+        }
+    }
+
     void watch() {
         try {
             int n = watcher.poll();
@@ -106,25 +131,19 @@ public class Schedules implements SchedulingConfigurer {
                 LOG.info("{} session(s) reviewed", n);
                 // The review just cached the streams: archiving the new session costs two list calls.
                 archive.refresh(3);
+                scanSegments(20);
             }
         } catch (RuntimeException e) {
             LOG.warn("looking for new activities failed: {}", e.getMessage());
         }
     }
 
-    /** The week's recap and, in planning mode, next week published. */
+    /** The week's recap. Nothing is planned or published unasked: /semaine does that on request. */
     void sundayEvening() {
         try {
             StringBuilder b = new StringBuilder(planner.recap());
-            var next = planner.nextWeek();
-            b.append("\n\n").append(planner.describe(next));
-            if (plans.mode() == io.github.pharaphara.raceradio.bot.store.Plans.Mode.PLAN && !next.sessions().isEmpty()) {
-                var problems = planner.publish(next);
-                b.append(problems.isEmpty()
-                        ? (!planner.publishes() ? "\n\nMode sec : rien n'a été publié." : "\n\nPubliée dans Intervals.icu, elle arrive sur ta montre.")
-                        : "\n\nNon publié : " + String.join(" ; ", problems));
-            }
             planner.feasibility().ifPresent(f -> b.append("\n\n").append(planner.describe(f)));
+            b.append("\n\nLa semaine prochaine : /semaine pour que je te la propose.");
             if (props.telegram().allowedChatId() != 0) {
                 telegram.send(props.telegram().allowedChatId(), b.toString());
             }

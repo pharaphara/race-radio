@@ -108,7 +108,7 @@ class AdapterTest {
 
     @Test
     void inAnalysisModeNothingIsTouched() {
-        plans.mode(Plans.Mode.OFF);
+        plans.mode(Plans.Mode.ANALYSE);
         assertThat(adapter.adapt(Verdict.RED)).isEmpty();
         assertThat(requests).isEmpty();
         assertThat(journal).isEmpty();
