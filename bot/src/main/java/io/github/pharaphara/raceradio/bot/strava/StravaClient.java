@@ -47,6 +47,8 @@ public class StravaClient {
         }
     }
 
+    private final URI api;
+    private final URI token;
     private final String clientId;
     private final String clientSecret;
     private final String envRefreshToken;
@@ -56,9 +58,17 @@ public class StravaClient {
     private String accessToken;
     private Instant accessExpires = Instant.EPOCH;
     private int[] usage = {0, 0};
+    /** When Strava last reported the usage: a count from a past window no longer holds. */
+    private Instant usageAt = Instant.EPOCH;
     private int[] limit = {100, 1000};
 
     public StravaClient(String clientId, String clientSecret, String refreshToken, JdbcTemplate jdbc, Clock clock) {
+        this(clientId, clientSecret, refreshToken, jdbc, clock, API, TOKEN);
+    }
+
+    StravaClient(String clientId, String clientSecret, String refreshToken, JdbcTemplate jdbc, Clock clock, URI api, URI token) {
+        this.api = api;
+        this.token = token;
         this.clientId = clientId;
         this.clientSecret = clientSecret;
         this.envRefreshToken = refreshToken;
@@ -75,10 +85,13 @@ public class StravaClient {
     /** GET on the API. Refuses when the read quota is nearly used up. */
     public synchronized JsonNode get(String path) {
         guard();
-        HttpRequest req = HttpRequest.newBuilder(API.resolve(path)).timeout(Duration.ofSeconds(30))
+        HttpRequest req = HttpRequest.newBuilder(api.resolve(path)).timeout(Duration.ofSeconds(30))
                 .header("Authorization", "Bearer " + access()).header("User-Agent", "race-radio").GET().build();
         HttpResponse<String> r = send(req);
-        r.headers().firstValue("x-readratelimit-usage").ifPresent(v -> usage = pair(v, usage));
+        r.headers().firstValue("x-readratelimit-usage").ifPresent(v -> {
+            usage = pair(v, usage);
+            usageAt = clock.instant();
+        });
         r.headers().firstValue("x-readratelimit-limit").ifPresent(v -> limit = pair(v, limit));
         if (r.statusCode() == 429) {
             throw new QuotaReached(nextWindow());
@@ -95,6 +108,16 @@ public class StravaClient {
     }
 
     private void guard() {
+        // The count is only refreshed by a call; without this, a count taken near the limit would
+        // forbid the very call that shows the new window started from zero.
+        long now = clock.instant().getEpochSecond();
+        long at = usageAt.getEpochSecond();
+        if (at / 900 != now / 900) {
+            usage[0] = 0;
+        }
+        if (at / 86_400 != now / 86_400) {
+            usage[1] = 0;
+        }
         if (usage[1] >= limit[1] - RESERVE_DAY) {
             throw new QuotaReached(nextUtcMidnight());
         }
@@ -120,7 +143,7 @@ public class StravaClient {
         }
         String body = form("client_id", clientId, "client_secret", clientSecret,
                 "grant_type", "refresh_token", "refresh_token", refreshToken());
-        HttpResponse<String> r = send(HttpRequest.newBuilder(TOKEN).timeout(Duration.ofSeconds(30))
+        HttpResponse<String> r = send(HttpRequest.newBuilder(token).timeout(Duration.ofSeconds(30))
                 .header("Content-Type", "application/x-www-form-urlencoded").header("User-Agent", "race-radio")
                 .POST(HttpRequest.BodyPublishers.ofString(body)).build());
         if (r.statusCode() / 100 != 2) {
