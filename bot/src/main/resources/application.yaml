@@ -27,6 +27,8 @@ race-radio:
   dry-run: ${RACE_RADIO_DRY_RUN:true}
   # Or open writes kind by kind: workouts, notes, comments, intervals, merge (or all). Overrides dry-run.
   writes: ${RACE_RADIO_WRITES:}
+  # When the current heart-rate strap came into use (YYYY-MM-DD): trends flag the months before it.
+  hr-strap-since: ${RACE_RADIO_HR_STRAP_SINCE:}
   # A personal Strava API app, to harvest segments before a subscription ends. Optional.
   strava:
     client-id: ${STRAVA_CLIENT_ID:}

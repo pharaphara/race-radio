@@ -1,6 +1,7 @@
 package io.github.pharaphara.raceradio.core.metrics;
 
 import io.github.pharaphara.raceradio.core.heart.AerobicDecoupling;
+import io.github.pharaphara.raceradio.core.series.HeartRate;
 import io.github.pharaphara.raceradio.core.series.Samples;
 import io.github.pharaphara.raceradio.core.swim.StrokeEfficiency;
 
@@ -22,7 +23,7 @@ import java.util.function.Function;
 public final class StreamMetrics {
 
     /** Bumped whenever a figure is added or its definition changes, so archived sessions are recomputed locally. */
-    public static final int VERSION = 2;
+    public static final int VERSION = 3;
 
     /** Best mean power windows, in seconds, by key. */
     public static final Map<String, Integer> POWER_WINDOWS = orderedOf(
@@ -61,7 +62,9 @@ public final class StreamMetrics {
     public static Map<String, Double> compute(String sport, Function<String, Optional<Samples>> streams,
                                               Integer thresholdPower, Double thresholdSpeed) {
         Map<String, Double> out = new LinkedHashMap<>();
-        Optional<Samples> hr = streams.apply("heartrate");
+        Optional<Samples> hr = streams.apply("heartrate").map(HeartRate::clean);
+        // Held thirty seconds: a strap glitch of a few seconds cannot make a maximum.
+        hr.ifPresent(h -> put(out, "hr_max_30s", HeartRate.maxHeld(h, 30)));
         if (BIKE.contains(sport)) {
             streams.apply("watts").ifPresent(w -> {
                 POWER_WINDOWS.forEach((key, window) -> put(out, key, bestMean(w, window)));

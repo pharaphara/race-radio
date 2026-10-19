@@ -44,6 +44,17 @@ public final class Trends {
         this.clock = clock;
     }
 
+    /** Metrics read from the heart-rate strap, which a change of strap makes less comparable. */
+    static final java.util.Set<String> HEART_RATE = java.util.Set.of("velo_efficacite", "velo_derive", "velo_fc_endurance",
+            "course_efficacite", "course_derive", "fc_max_tenue", "fc_repos");
+    private LocalDate strapSince;
+
+    /** When the current heart-rate strap came into use; months before it are flagged. Null when unknown. */
+    public Trends withStrapSince(LocalDate since) {
+        this.strapSince = since;
+        return this;
+    }
+
     public void handle(String text) {
         String rest = text.replaceFirst("(?i)^/tendances?(@\\S+)?\\s*", "").strip();
         if (rest.isEmpty()) {
@@ -103,6 +114,9 @@ public final class Trends {
         }
         if (r.best() != null && m.aggregate() != Trend.Aggregate.MEDIAN) {
             b.append("\nRecord de la période : ").append(m.format().apply(r.best().value())).append(" le ").append(DAY.format(r.best().day())).append(".");
+        }
+        if (strapSince != null && HEART_RATE.contains(m.key()) && from.atDay(1).isBefore(strapSince)) {
+            b.append("\nAvant le ").append(DAY.format(strapSince)).append(", la FC venait d'une autre ceinture : ces mois-là se comparent moins bien.");
         }
         b.append("\nArchive locale : ").append(archive.activities()).append(" activités")
                 .append(archive.lastSync().map(d -> ", à jour au " + DAY.format(d)).orElse("")).append(".");

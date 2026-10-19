@@ -128,7 +128,7 @@ public final class SessionReview {
         return new Outcome(facts, message, worded, images);
     }
 
-    SessionFacts facts(ActivitySummary a) {
+    public SessionFacts facts(ActivitySummary a) {
         return compute(a).facts();
     }
 
@@ -136,7 +136,7 @@ public final class SessionReview {
         Optional<SportSettings> settings = intervals.athlete().settingsFor(a.type());
         ActivityStreams streams = this.streams.apply(a.id());
         Optional<EffortSignal> signal = EffortSignal.of(a.type(), streams, settings);
-        Double hrMean = streams.get("heartrate").map(Samples::mean).filter(v -> !v.isNaN()).orElse(null);
+        Double hrMean = streams.get("heartrate").map(io.github.pharaphara.raceradio.core.series.HeartRate::clean).map(Samples::mean).filter(v -> !v.isNaN()).orElse(null);
         if (signal.isEmpty()) {
             return new Computed(new SessionFacts(a.id(), a.type(), a.start(), a.movingSeconds(), a.distanceMetres(), a.elevationGainMetres(),
                     a.load(), hrMean, false, null, null, null, null, List.of(), List.of(), false, List.of(),
@@ -147,7 +147,7 @@ public final class SessionReview {
         List<Block> device = deviceWork(a.id(), s.values());
         SessionStructure.Result structure = SessionStructure.of(device, plan, s.values(), s.plateau());
 
-        Optional<Samples> heart = streams.get("heartrate");
+        Optional<Samples> heart = streams.get("heartrate").map(io.github.pharaphara.raceradio.core.series.HeartRate::clean);
         Optional<Samples> altitude = streams.get("altitude");
         List<SessionFacts.BlockFact> work = structure.work().stream().map(b -> new SessionFacts.BlockFact(
                 b.start(), b.seconds(), Formats.duration(b.seconds()), Formats.effort(b.mean(), s.unit(), a.type()),
@@ -180,7 +180,7 @@ public final class SessionReview {
         }
 
         Double decoupling = null;
-        Optional<Samples> hr = streams.get("heartrate");
+        Optional<Samples> hr = streams.get("heartrate").map(io.github.pharaphara.raceradio.core.series.HeartRate::clean);
         if (structure.work().isEmpty() && hr.isPresent() && s.values().length() >= DECOUPLING_MIN_SECONDS) {
             double d = AerobicDecoupling.of(s.values(), hr.get());
             decoupling = Double.isNaN(d) ? null : round1(100 * d);

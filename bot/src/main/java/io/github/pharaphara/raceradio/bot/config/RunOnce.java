@@ -85,6 +85,13 @@ public class RunOnce implements ApplicationRunner {
             SessionReview.Outcome o = review.review(a, false);
             print(o.message(), o.worded(), "structure " + o.facts().structureSource() + ", " + o.facts().repetitions());
             save(id, o.images());
+        } else if (once.startsWith("facts:")) {
+            String id = once.substring("facts:".length());
+            ActivitySummary a = intervals.activities(LocalDate.now().minusYears(1), LocalDate.now()).stream()
+                    .filter(x -> x.id().equals(id)).findFirst()
+                    .orElseThrow(() -> new IllegalArgumentException("no activity " + id + " in the last year"));
+            System.out.println("\n" + tools.jackson.databind.json.JsonMapper.builder().build().writerWithDefaultPrettyPrinter()
+                    .writeValueAsString(review.facts(a)));
         } else if (once.startsWith("photo:")) {
             try {
                 byte[] photo = java.nio.file.Files.readAllBytes(java.nio.file.Path.of(once.substring("photo:".length())));

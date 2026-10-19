@@ -142,8 +142,10 @@ public class BotConfiguration {
 
     @Bean
     io.github.pharaphara.raceradio.bot.archive.Trends trends(io.github.pharaphara.raceradio.bot.archive.Archive archive,
-                                                           TelegramClient telegram, Clock clock) {
-        return new io.github.pharaphara.raceradio.bot.archive.Trends(archive, telegram, props.telegram().allowedChatId(), clock);
+                                                           TelegramClient telegram, Clock clock,
+            @org.springframework.beans.factory.annotation.Value("${race-radio.hr-strap-since:}") String strapSince) {
+        return new io.github.pharaphara.raceradio.bot.archive.Trends(archive, telegram, props.telegram().allowedChatId(), clock)
+                .withStrapSince(strapSince.isBlank() ? null : java.time.LocalDate.parse(strapSince));
     }
 
     @Bean

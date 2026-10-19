@@ -22,6 +22,7 @@ public final class MetricCatalog {
         BIKE("vélo", "'Ride','VirtualRide','GravelRide','MountainBikeRide'"),
         RUN("course", "'Run','TrailRun','VirtualRun','Treadmill'"),
         SWIM("natation", "'Swim','OpenWaterSwim'"),
+        ANY("toutes les séances", "'Ride','VirtualRide','GravelRide','MountainBikeRide','Run','TrailRun','VirtualRun','Treadmill','Swim','OpenWaterSwim'"),
         DAILY("au quotidien", null);
 
         final String label;
@@ -124,6 +125,9 @@ public final class MetricCatalog {
             new Metric("nage_allure", Group.SWIM, "allure moyenne de nage", "100.0 / " + s("average_speed"),
                     s("average_speed") + " > 0", "toutes les nages", Aggregate.MEDIAN, false, clock("/100 m"),
                     List.of("allure nage", "allure natation", "nage", "natation")),
+            new Metric("fc_max_tenue", Group.ANY, "FC la plus haute tenue 30 s", c("hr_max_30s"), "1",
+                    "toutes les séances avec FC (un pic de capteur de quelques secondes ne compte pas)", Aggregate.MAX, null,
+                    num(0, "bpm"), List.of("fc max", "frequence cardiaque max", "fc maximale", "fc max tenue")),
             new Metric("vfc", Group.DAILY, "variabilité cardiaque (VFC) au réveil", w("hrv"), "1", "chaque matin mesuré",
                     Aggregate.MEDIAN, true, num(0, "ms"), List.of("vfc", "hrv", "variabilite")),
             new Metric("fc_repos", Group.DAILY, "FC de repos", w("restingHR"), "1", "chaque matin mesuré",
@@ -159,7 +163,7 @@ public final class MetricCatalog {
         int bestScore = 0;
         for (Metric m : ALL) {
             // A sport named restricts the search to it: "course efficacité" never lands on the bike.
-            if (sport != null && m.group() != sport && m.group() != Group.DAILY) {
+            if (sport != null && m.group() != sport && m.group() != Group.DAILY && m.group() != Group.ANY) {
                 continue;
             }
             for (String w : m.words()) {
