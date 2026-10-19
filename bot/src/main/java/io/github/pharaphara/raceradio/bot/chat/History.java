@@ -26,6 +26,21 @@ public interface History {
     /** The metrics {@link #trend} knows, one "key: label" line each. */
     List<String> metrics();
 
+    /** The figures of the session(s) of one day, worded for the athlete, or empty. */
+    default Optional<String> activity(LocalDate day) {
+        return Optional.empty();
+    }
+
+    /** Two days' sessions side by side, or empty when either is missing. */
+    default Optional<String> compare(LocalDate one, LocalDate two) {
+        return Optional.empty();
+    }
+
+    /** What is planned in the coming days, each with its steps and note as the calendar holds them. */
+    default List<String> plannedDetail(int days) {
+        return List.of();
+    }
+
     History NONE = new History() {
         @Override
         public List<String> recentDays(int days) {

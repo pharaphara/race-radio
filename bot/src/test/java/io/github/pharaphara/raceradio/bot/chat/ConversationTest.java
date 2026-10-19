@@ -174,4 +174,50 @@ class ConversationTest {
         assertThat(memory.withdraw(id)).isFalse();
         assertThat(memory.activeNotes()).isEmpty();
     }
+
+    @Test
+    void followUpsComeAsSuggestionsAndAreLeftOutOfTheText() {
+        modelReply = """
+                Ta VFC est à **30 ms**, sous ta moyenne.
+                SUGGESTIONS:
+                - Regarde aussi mon sommeil
+                - « Propose la séance de jeudi »
+                - Compare à ma sortie du 4 octobre
+                - une de trop""";
+        Conversation.Reply r = conversation().reply("Ma VFC ?");
+        assertThat(r.text()).isEqualTo("Ta VFC est à **30 ms**, sous ta moyenne.");
+        assertThat(r.suggestions()).containsExactly("Regarde aussi mon sommeil", "Propose la séance de jeudi", "Compare à ma sortie du 4 octobre");
+        assertThat(r.action()).isNull();
+    }
+
+    @Test
+    void askingForAWorkoutOpensADraftInsteadOfAnswering() {
+        modelReply = "SEANCE jeudi une VO2 à vélo";
+        Conversation.Reply r = conversation().reply("Propose la séance de jeudi");
+        assertThat(r.text()).isNull();
+        assertThat(r.action()).isEqualTo(new Conversation.Action("SEANCE", "jeudi une VO2 à vélo"));
+        modelReply = "SEMAINE";
+        assertThat(conversation().reply("Programme ma semaine").action()).isEqualTo(new Conversation.Action("SEMAINE", ""));
+    }
+
+    @Test
+    void oneSessionOrTwoSideBySideAreAnsweredByTheProgram() {
+        history = new History() {
+            @Override public List<String> recentDays(int days) { return List.of(); }
+            @Override public List<String> recentSessions(int days) { return List.of(); }
+            @Override public java.util.Optional<String> day(LocalDate day) { return java.util.Optional.empty(); }
+            @Override public boolean trend(String metricKey, int months) { return false; }
+            @Override public List<String> metrics() { return List.of(); }
+            @Override public java.util.Optional<String> activity(LocalDate day) {
+                return java.util.Optional.of("« Sortie » (Ride)\nVitesse en mouvement : 29,1 km/h");
+            }
+            @Override public java.util.Optional<String> compare(LocalDate one, LocalDate two) {
+                return java.util.Optional.of("Vitesse en mouvement : 27,0 km/h → 29,1 km/h");
+            }
+        };
+        modelReply = "ACTIVITE 2026-10-16";
+        assertThat(conversation().answer("Ma moyenne sans les pauses le 16 ?")).contains("29,1 km/h");
+        modelReply = "COMPARE 2026-03-04 2026-10-16";
+        assertThat(conversation().answer("Compare à ma sortie du 4 mars")).contains("27,0 km/h → 29,1 km/h");
+    }
 }

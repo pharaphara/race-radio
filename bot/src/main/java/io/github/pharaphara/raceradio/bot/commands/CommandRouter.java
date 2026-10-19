@@ -21,6 +21,7 @@ import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.ZoneId;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -108,9 +109,28 @@ public final class CommandRouter {
         this.dryRun = dryRun;
     }
 
+    private QuickReplies replies = new QuickReplies();
+
+    /** The store behind the buttons that speak for the athlete, shared with the other senders. */
+    public CommandRouter withReplies(QuickReplies replies) {
+        this.replies = replies;
+        return this;
+    }
+
     public void handle(TelegramClient.Update u) {
         if (u.isCallback()) {
             String data = u.callbackData() == null ? "" : u.callbackData();
+            if (replies.handles(data)) {
+                telegram.acknowledge(u.callbackId(), "Reçu");
+                Optional<String> text = replies.text(data);
+                if (text.isEmpty()) {
+                    telegram.send(chatId, "Ce bouton est trop ancien : écris-moi ta question.");
+                } else {
+                    sessions.stopAmending();
+                    handleText(text.get());
+                }
+                return;
+            }
             if (sessions.handles(data)) {
                 telegram.acknowledge(u.callbackId(), "Reçu");
                 sessions.callback(data);
@@ -154,7 +174,11 @@ public final class CommandRouter {
             telegram.send(chatId, answer);
             return;
         }
-        String text = u.text() == null ? "" : u.text().strip();
+        handleText(u.text() == null ? "" : u.text().strip());
+    }
+
+    /** A message typed by the athlete, or the text of a button they pressed. */
+    void handleText(String text) {
         String command = text.split("\\s+", 2)[0].toLowerCase(Locale.ROOT);
         int at = command.indexOf('@');
         if (at > 0) {
@@ -208,7 +232,8 @@ public final class CommandRouter {
                     sessions.amend(text);
                     yield null;
                 }
-                yield conversation.answer(text);
+                converse(text);
+                yield null;
             }
         };
         if (answer == null) {
@@ -224,6 +249,23 @@ public final class CommandRouter {
             } catch (RuntimeException e) {
                 telegram.send(chatId, "Le graphique n'a pas pu être dessiné.");
             }
+        }
+    }
+
+    /** Free text: the coach answers with follow-ups as buttons, or opens the draft asked for. */
+    void converse(String text) {
+        io.github.pharaphara.raceradio.bot.chat.Conversation.Reply r = conversation.reply(text);
+        if (r.action() != null) {
+            String request = r.action().request();
+            if (r.action().kind().equals("SEMAINE")) {
+                sessions.week("/semaine " + request);
+            } else {
+                sessions.draft("/seance " + request);
+            }
+            return;
+        }
+        if (r.text() != null) {
+            telegram.sendRichWithButtons(chatId, r.text(), replies.rows(r.suggestions()));
         }
     }
 

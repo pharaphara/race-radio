@@ -104,6 +104,11 @@ public class BotConfiguration {
     }
 
     @Bean
+    io.github.pharaphara.raceradio.bot.commands.QuickReplies quickReplies() {
+        return new io.github.pharaphara.raceradio.bot.commands.QuickReplies();
+    }
+
+    @Bean
     io.github.pharaphara.raceradio.bot.strava.StravaClient stravaClient(org.springframework.jdbc.core.JdbcTemplate jdbc, Clock clock,
             @org.springframework.beans.factory.annotation.Value("${race-radio.strava.client-id:}") String id,
             @org.springframework.beans.factory.annotation.Value("${race-radio.strava.client-secret:}") String secret,
@@ -150,13 +155,15 @@ public class BotConfiguration {
 
     @Bean
     ActivityWatcher activityWatcher(IntervalsClient intervals, ReviewedActivities reviewed, SessionReview review,
-                                    TelegramClient telegram, Clock clock) {
+                                    TelegramClient telegram, Clock clock, io.github.pharaphara.raceradio.bot.commands.QuickReplies replies) {
         return new ActivityWatcher(intervals, reviewed, review, (activity, outcome) -> {
             if (props.telegram().allowedChatId() != 0) {
-                telegram.sendRich(props.telegram().allowedChatId(), outcome.message());
+                // Charts first, so the buttons stay under the text, at the bottom of the chat.
                 for (byte[] image : outcome.images()) {
                     telegram.sendPhoto(props.telegram().allowedChatId(), image, null);
                 }
+                telegram.sendRichWithButtons(props.telegram().allowedChatId(), outcome.message(),
+                        replies.rows(java.util.List.of("Analyse plus détaillée", "Que faire demain ?")));
             }
         }, props.schedule().watchFrom(), props.schedule().watchUntil(), clock);
     }
@@ -186,9 +193,11 @@ public class BotConfiguration {
                                 io.github.pharaphara.raceradio.bot.merge.Merger merger,
                                 io.github.pharaphara.raceradio.bot.plan.SessionCreator sessions,
                                 io.github.pharaphara.raceradio.bot.archive.Trends trends,
-                                io.github.pharaphara.raceradio.bot.strava.Segments segments) {
+                                io.github.pharaphara.raceradio.bot.strava.Segments segments,
+                                io.github.pharaphara.raceradio.bot.commands.QuickReplies replies) {
         return new CommandRouter(telegram, props.telegram().allowedChatId(), morning, feels, decisions, ledger, journal,
-                model, clock, props.zone(), writer.allowed().isEmpty(), conversation, memory, boards, planCommands, adapter, merger, sessions, trends, segments);
+                model, clock, props.zone(), writer.allowed().isEmpty(), conversation, memory, boards, planCommands, adapter, merger, sessions, trends, segments)
+                .withReplies(replies);
     }
 
     @Bean
@@ -199,9 +208,10 @@ public class BotConfiguration {
                                                                         DecisionLog decisions,
                                                                         io.github.pharaphara.raceradio.bot.store.Conversations memory,
                                                                         io.github.pharaphara.raceradio.bot.archive.Archive archive,
-                                                                        TelegramClient telegram, Clock clock) {
+                                                                        TelegramClient telegram, Clock clock,
+                                                                        io.github.pharaphara.raceradio.bot.commands.QuickReplies replies) {
         return new io.github.pharaphara.raceradio.bot.plan.SessionCreator(model, planner, writer, plans, decisions, memory,
-                archive, telegram, props.telegram().allowedChatId(), clock);
+                archive, telegram, props.telegram().allowedChatId(), clock).withReplies(replies);
     }
 
     @Bean

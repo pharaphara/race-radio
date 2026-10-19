@@ -63,6 +63,9 @@ public final class SessionCreator {
             Map.entry("dim", DayOfWeek.SUNDAY));
     private static final Pattern DAY_WORD = Pattern.compile(
             "(?i)^(aujourd'hui|aujourdhui|auj|demain|après-demain|apres-demain|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|lun|mar|mer|jeu|ven|sam|dim|\\d{4}-\\d{2}-\\d{2}|\\d{1,2}/\\d{1,2})\\b\\s*");
+    /** A day named anywhere in the request: full words only, a date first, so "marche" never reads as Tuesday. */
+    private static final Pattern DAY_ANYWHERE = Pattern.compile(
+            "(?i)(?<![\\p{L}\\d-])(\\d{4}-\\d{2}-\\d{2}|aujourd'hui|demain|après-demain|apres-demain|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)(?![\\p{L}\\d])");
     private static final Map<String, String> VERDICTS = Map.of("GREEN", "green, train as planned", "YELLOW", "yellow, lighter version",
             "RED", "red, rest or active recovery");
     /** Days of history given to the model to calibrate. */
@@ -100,6 +103,13 @@ public final class SessionCreator {
     private final AtomicLong ids = new AtomicLong();
     /** The draft the athlete pressed Modifier on: their next plain message is the change. */
     private volatile Long amending;
+    private io.github.pharaphara.raceradio.bot.commands.QuickReplies replies = new io.github.pharaphara.raceradio.bot.commands.QuickReplies();
+
+    /** The store behind the buttons that speak for the athlete. */
+    public SessionCreator withReplies(io.github.pharaphara.raceradio.bot.commands.QuickReplies replies) {
+        this.replies = replies;
+        return this;
+    }
 
     public SessionCreator(CoachModel model, Planner planner, IntervalsWriter writer, Plans plans, DecisionLog decisions,
                           Conversations memory, Archive archive, TelegramClient telegram, long chatId, Clock clock) {
@@ -187,13 +197,9 @@ public final class SessionCreator {
         LocalDate today = LocalDate.now(clock);
         LocalDate day;
         try {
-            Matcher m = DAY_WORD.matcher(rest);
-            if (m.find()) {
-                day = day(m.group(1), today);
-                rest = rest.substring(m.end()).strip();
-            } else {
-                day = today;
-            }
+            DayRequest d = dayRequest(rest, today);
+            day = d.day();
+            rest = d.rest();
         } catch (DateTimeParseException | IllegalArgumentException e) {
             return new Prepared("Je n'ai pas compris le jour. Écris aujourd'hui, demain, un jour de la semaine ou une date (2026-11-03).", null);
         }
@@ -442,9 +448,10 @@ public final class SessionCreator {
                 return;
             }
             Item i = p.items().getFirst();
-            telegram.sendWithButtons(chatId, "« " + i.workout().name() + " » publiée pour " + DAY.format(i.day())
-                    + ", avec sa note. Elle partira vers ta montre et MyWhoosh à la prochaine synchronisation." + trouble,
-                    Map.of("Retirer du calendrier", "del:" + created.getFirst()));
+            List<Map<String, String>> rows = new ArrayList<>(replies.rows(List.of("Comment exécuter ma séance du " + SHORT.format(i.day()) + " ?")));
+            rows.add(Map.of("Retirer du calendrier", "del:" + created.getFirst()));
+            telegram.sendWithButtonRows(chatId, "« " + i.workout().name() + " » publiée pour " + DAY.format(i.day())
+                    + ", avec sa note. Elle partira vers ta montre et MyWhoosh à la prochaine synchronisation." + trouble, rows);
             return;
         }
         long batch = ids.incrementAndGet();
@@ -542,6 +549,26 @@ public final class SessionCreator {
             b.append('\n');
         }
         return b.toString().strip();
+    }
+
+    record DayRequest(LocalDate day, String rest) {
+    }
+
+    /**
+     * The day of a request and what is left of it: a day word first ("demain vélo 1h"), else a full
+     * day name or a date anywhere ("une séance de seuil jeudi"), else today.
+     */
+    static DayRequest dayRequest(String text, LocalDate today) {
+        Matcher m = DAY_WORD.matcher(text);
+        if (m.find()) {
+            return new DayRequest(day(m.group(1), today), text.substring(m.end()).strip());
+        }
+        Matcher anywhere = DAY_ANYWHERE.matcher(text);
+        if (anywhere.find()) {
+            String rest = (text.substring(0, anywhere.start()) + " " + text.substring(anywhere.end())).replaceAll("\\s+", " ").strip();
+            return new DayRequest(day(anywhere.group(1), today), rest);
+        }
+        return new DayRequest(today, text);
     }
 
     static LocalDate day(String word, LocalDate today) {

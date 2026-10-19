@@ -92,6 +92,15 @@ class SessionCreatorTest {
     }
 
     @Test
+    void theDayIsFoundWhereverItIsSaid() {
+        assertThat(SessionCreator.dayRequest("demain cap facile", TODAY)).isEqualTo(new SessionCreator.DayRequest(TODAY.plusDays(1), "cap facile"));
+        assertThat(SessionCreator.dayRequest("Séance de seuil jeudi 2026-10-22", TODAY).day()).isEqualTo(LocalDate.of(2026, 10, 22));
+        assertThat(SessionCreator.dayRequest("une sortie longue après-demain", TODAY))
+                .isEqualTo(new SessionCreator.DayRequest(TODAY.plusDays(2), "une sortie longue"));
+        assertThat(SessionCreator.dayRequest("marche rapide 1h", TODAY)).isEqualTo(new SessionCreator.DayRequest(TODAY, "marche rapide 1h"));
+    }
+
+    @Test
     void anAnswerWithoutAWorkoutIsRefused() {
         assertThatThrownBy(() -> SessionCreator.json("Je ne sais pas.")).isInstanceOf(IllegalArgumentException.class);
     }

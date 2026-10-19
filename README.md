@@ -115,7 +115,11 @@ each activity's streams once: questions about any period are answered without ca
 | `/note …` · `/notes` · `/oubli n` | facts the coach keeps in mind |
 | `/cout` · `/dernierenvoi` | what the model cost, what was sent |
 | a photo | a gym board, added to the day's session |
-| anything else | a question, answered with the last two weeks; older days and trends are looked up in the archive |
+| anything else | a question, answered with the last two weeks; older days, single sessions, comparisons and trends are looked up in the archive |
+
+Under its messages the coach offers buttons that speak for you: fixed ones (a deeper review, how to
+do today's session) and three follow-ups it suggests after each answer. Pressing one is the same as
+typing it; one that asks for a workout or a week opens a draft, published only on Publier.
 
 ## Modules
 

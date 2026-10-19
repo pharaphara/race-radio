@@ -31,6 +31,7 @@ public class Schedules implements SchedulingConfigurer {
     private final io.github.pharaphara.raceradio.bot.plan.Adapter adapter;
     private final io.github.pharaphara.raceradio.bot.archive.Archive archive;
     private final io.github.pharaphara.raceradio.bot.strava.StravaHarvest strava;
+    private final io.github.pharaphara.raceradio.bot.commands.QuickReplies replies;
 
     private final String once;
 
@@ -39,7 +40,9 @@ public class Schedules implements SchedulingConfigurer {
                      io.github.pharaphara.raceradio.bot.plan.Planner planner, io.github.pharaphara.raceradio.bot.store.Plans plans,
                      io.github.pharaphara.raceradio.bot.plan.Adapter adapter,
                      io.github.pharaphara.raceradio.bot.archive.Archive archive,
-                     io.github.pharaphara.raceradio.bot.strava.StravaHarvest strava) {
+                     io.github.pharaphara.raceradio.bot.strava.StravaHarvest strava,
+                     io.github.pharaphara.raceradio.bot.commands.QuickReplies replies) {
+        this.replies = replies;
         this.strava = strava;
         this.archive = archive;
         this.adapter = adapter;
@@ -83,12 +86,15 @@ public class Schedules implements SchedulingConfigurer {
                 LOG.warn("adjusting the day failed: {}", e.getMessage());
             }
             if (props.telegram().allowedChatId() != 0) {
+                boolean planned = archive.planned(java.time.LocalDate.now(props.zone()), 1).stream().anyMatch(l -> l.contains(" WORKOUT "));
+                java.util.List<java.util.Map<String, String>> rows = new java.util.ArrayList<>(replies.rows(java.util.List.of(
+                        planned ? "Comment exécuter ma séance du jour ?" : "Propose-moi une séance pour aujourd'hui")));
+                String text = o.message();
                 if (adjusted.isPresent()) {
-                    telegram.sendWithButtons(props.telegram().allowedChatId(), o.message() + "\n\n" + adjusted.get().summary(),
-                            java.util.Map.of("Annuler l'ajustement", "undo:" + adjusted.get().batch()));
-                } else {
-                    telegram.send(props.telegram().allowedChatId(), o.message());
+                    text += "\n\n" + adjusted.get().summary();
+                    rows.addFirst(java.util.Map.of("Annuler l'ajustement", "undo:" + adjusted.get().batch()));
                 }
+                telegram.sendWithButtonRows(props.telegram().allowedChatId(), text, rows);
             }
         } catch (RuntimeException e) {
             LOG.error("morning call failed: {}", e.getMessage());
