@@ -173,6 +173,29 @@ public final class IntervalsWriter {
         return Optional.of(reread);
     }
 
+    /**
+     * Moves a workout the coach created to another day. Only the date changes: the entry keeps its
+     * id, its steps and its note, and the calendar sends the change on to the watch. Anything not
+     * created by race-radio is refused. Returns the entry as the calendar now holds it, or empty in
+     * dry run.
+     */
+    public Optional<CalendarEvent> moveOwnEvent(long eventId, LocalDate day) {
+        CalendarEvent e = client.get(client.athletePath("events/" + eventId), new TypeReference<CalendarEvent>() { });
+        if (!e.ownedByRaceRadio()) {
+            throw new IllegalStateException("refusing to move calendar entry " + eventId + ": not created by race-radio");
+        }
+        String response = write(Write.WORKOUTS, "PUT", client.athletePath("events/" + eventId),
+                Map.of("start_date_local", day + "T00:00:00"));
+        if (response == null) {
+            return Optional.empty();
+        }
+        CalendarEvent reread = client.get(client.athletePath("events/" + eventId), new TypeReference<CalendarEvent>() { });
+        if (reread.start() == null || !reread.start().toLocalDate().equals(day)) {
+            throw new IllegalStateException("the calendar did not take the new date for entry " + eventId);
+        }
+        return Optional.of(reread);
+    }
+
     /** A note on the calendar, such as the morning verdict and its reasons. */
     public Optional<CalendarEvent> publishNote(LocalDate day, String title, String text) {
         return postEvent(Write.NOTES, event(day, "NOTE", null, title, text));

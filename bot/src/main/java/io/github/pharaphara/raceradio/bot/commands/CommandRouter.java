@@ -40,6 +40,8 @@ public final class CommandRouter {
             /sports natation off · les sports de la saison
             /seance demain cap facile · une séance proposée, montrée avant publication
             /semaine · ta semaine proposée, jour par jour, montrée avant publication
+            /deplacer jeudi vendredi · une de mes séances changée de jour
+            /modifier demain plus court · une de mes séances revue, montrée avant publication
             /plan · où tu en es face à ton objectif
             /mode demande · analyser (si un autre outil planifie)
             /note j'ai mal au mollet gauche · un fait que le coach doit garder en tête
@@ -131,6 +133,12 @@ public final class CommandRouter {
                 }
                 return;
             }
+            if (sessions.edits().handles(data)) {
+                telegram.acknowledge(u.callbackId(), "Reçu");
+                sessions.stopAmending();
+                sessions.edits().callback(data);
+                return;
+            }
             if (sessions.handles(data)) {
                 telegram.acknowledge(u.callbackId(), "Reçu");
                 sessions.callback(data);
@@ -208,6 +216,14 @@ public final class CommandRouter {
                 sessions.week(text);
                 yield null;
             }
+            case "/deplacer", "/déplacer" -> {
+                sessions.edits().move(text);
+                yield null;
+            }
+            case "/modifier" -> {
+                sessions.edits().modify(text);
+                yield null;
+            }
             case "/fusionner" -> {
                 merge(text);
                 yield null;
@@ -257,10 +273,11 @@ public final class CommandRouter {
         io.github.pharaphara.raceradio.bot.chat.Conversation.Reply r = conversation.reply(text);
         if (r.action() != null) {
             String request = r.action().request();
-            if (r.action().kind().equals("SEMAINE")) {
-                sessions.week("/semaine " + request);
-            } else {
-                sessions.draft("/seance " + request);
+            switch (r.action().kind()) {
+                case "SEMAINE" -> sessions.week("/semaine " + request);
+                case "DEPLACER" -> sessions.edits().move("/deplacer " + request);
+                case "MODIFIER" -> sessions.edits().modify("/modifier " + request);
+                default -> sessions.draft("/seance " + request);
             }
             return;
         }
