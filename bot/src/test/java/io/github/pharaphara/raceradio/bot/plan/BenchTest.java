@@ -79,6 +79,12 @@ class BenchTest {
         if (model.startsWith("or:")) {
             return new OpenAiCompatibleTransport("", System.getenv("RACE_RADIO_MODEL_API_KEY"), Duration.ofMinutes(3));
         }
+        if (model.startsWith("groq:")) {
+            return new OpenAiCompatibleTransport("https://api.groq.com/openai/v1", System.getenv("GROQ_API_KEY"), Duration.ofMinutes(3));
+        }
+        if (model.startsWith("mistral:")) {
+            return new OpenAiCompatibleTransport("https://api.mistral.ai/v1", System.getenv("MISTRAL_API_KEY"), Duration.ofMinutes(3));
+        }
         return new ClaudeCodeTransport(System.getenv().getOrDefault("CLAUDE_COMMAND", "claude"),
                 Path.of(System.getProperty("bench")).resolve("claude-work"), Duration.ofMinutes(5));
     }
@@ -106,6 +112,7 @@ class BenchTest {
                 if (done.contains(task.id() + "|" + model.strip())) {
                     continue;
                 }
+                pause();
                 ModelRequest r = new ModelRequest(task.request().purpose(), name(model.strip()), task.request().effort(),
                         task.request().maxTokens(), false, task.request().promptVersion(), task.request().userContent());
                 ObjectNode row = JSON.createObjectNode();
@@ -149,6 +156,18 @@ class BenchTest {
         }
         Files.writeString(results, b.toString(), StandardCharsets.UTF_8);
         System.out.println("BENCH rechecked");
+    }
+
+    /** {@code -Dbench.pause=<seconds>} between calls, for free tiers that count tokens per minute. */
+    private static void pause() {
+        long seconds = Long.getLong("bench.pause", 0);
+        if (seconds > 0) {
+            try {
+                Thread.sleep(seconds * 1000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
     }
 
     private static Thresholds thresholds() {
