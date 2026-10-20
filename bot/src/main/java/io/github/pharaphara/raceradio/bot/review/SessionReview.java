@@ -52,7 +52,7 @@ public final class SessionReview {
     }
 
     /** The facts with the streams they came from, so the charts draw exactly what was analysed. */
-    record Computed(SessionFacts facts, Samples effort, Samples heartRate) {
+    record Computed(SessionFacts facts, Samples effort, Samples heartRate, Samples altitude) {
     }
 
     private final IntervalsClient intervals;
@@ -129,7 +129,7 @@ public final class SessionReview {
         }
         List<byte[]> images = List.of();
         try {
-            images = SessionCharts.render(facts, computed.effort(), computed.heartRate());
+            images = SessionCharts.render(facts, computed.effort(), computed.heartRate(), computed.altitude());
         } catch (RuntimeException e) {
             LOG.warn("charts of {} could not be drawn: {}", a.id(), e.getMessage());
         }
@@ -148,7 +148,7 @@ public final class SessionReview {
         if (signal.isEmpty()) {
             return new Computed(new SessionFacts(a.id(), a.type(), a.start(), a.movingSeconds(), a.distanceMetres(), a.elevationGainMetres(),
                     a.load(), hrMean, false, null, null, null, null, List.of(), List.of(), false, List.of(),
-                    null, null, Map.of(), null, null, null, null, context(a, null, null, streams)), null, null);
+                    null, null, Map.of(), null, null, null, null, context(a, null, null, streams)), null, null, null);
         }
         EffortSignal s = signal.get();
         List<PlannedStep> plan = plannedWork(a, s, settings);
@@ -206,7 +206,7 @@ public final class SessionReview {
                 work, reps, !plan.isEmpty(), comparison, power, zoneModel, zones, decoupling, dps,
                 threshold, threshold == null ? null : thresholdName(a.type()) + " " + Formats.effort(threshold, s.unit(), a.type()),
                 context(a, s, hr.orElse(null), streams)),
-                s.values(), hr.orElse(null));
+                s.values(), hr.orElse(null), altitude.orElse(null));
     }
 
     /** Feel as Intervals.icu stores it, 1 (strong) to 5 (weak). */
