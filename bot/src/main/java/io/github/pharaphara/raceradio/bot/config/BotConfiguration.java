@@ -202,7 +202,12 @@ public class BotConfiguration {
                                 io.github.pharaphara.raceradio.bot.archive.Archive archive,
                                 io.github.pharaphara.raceradio.bot.strava.LocalSegments segments) {
         return new SessionReview(intervals, writer, model, decisions, props.model().reviewEffort(), clock, streams::get)
-                .withArchive(archive).withSegments(segments);
+                .withArchive(archive).withSegments(segments).structured(structured());
+    }
+
+    /** Reviews and answers as JSON with references to the facts, for models that need the help. */
+    private boolean structured() {
+        return "json".equalsIgnoreCase(props.model().format() == null ? "" : props.model().format().strip());
     }
 
     @Bean
@@ -231,7 +236,7 @@ public class BotConfiguration {
                                                                      io.github.pharaphara.raceradio.bot.archive.Archive archive,
                                                                      io.github.pharaphara.raceradio.bot.archive.Trends trends) {
         return new io.github.pharaphara.raceradio.bot.chat.Conversation(model, morning, decisions, memory, clock,
-                new io.github.pharaphara.raceradio.bot.archive.ArchiveHistory(archive, trends));
+                new io.github.pharaphara.raceradio.bot.archive.ArchiveHistory(archive, trends)).structured(structured());
     }
 
     @Bean
