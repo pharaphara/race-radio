@@ -32,6 +32,35 @@ public final class WeekCheck {
     private WeekCheck() {
     }
 
+    /** Sport families: a home-trainer ride is cycling, a trail run is running. */
+    public static String family(String sport) {
+        if (sport == null) {
+            return "";
+        }
+        return switch (sport) {
+            case "Ride", "VirtualRide", "GravelRide", "MountainBikeRide", "EBikeRide" -> "Ride";
+            case "Run", "TrailRun", "VirtualRun" -> "Run";
+            case "Swim", "OpenWaterSwim" -> "Swim";
+            default -> sport;
+        };
+    }
+
+    /**
+     * The same rules, plus one: every session in one of the athlete's sports ({@code Ride}, {@code Run},
+     * {@code Swim}), or in a sport they asked for themselves.
+     */
+    public static List<String> problems(LocalDate start, int days, List<Planned> week, Thresholds t, java.util.Set<String> sports) {
+        List<String> out = new ArrayList<>(problems(start, days, week, t));
+        for (Planned p : week) {
+            String f = family(p.workout().sport());
+            if (!sports.isEmpty() && !sports.contains(f)) {
+                out.add("« " + p.workout().name() + " » le " + p.day() + " en " + p.workout().sport()
+                        + ", un sport que l'athlète ne pratique pas (" + String.join(", ", sports) + ")");
+            }
+        }
+        return out;
+    }
+
     /** The broken rules, in French for the athlete; empty when the week is sound. */
     public static List<String> problems(LocalDate start, int days, List<Planned> week, Thresholds t) {
         List<String> out = new ArrayList<>();

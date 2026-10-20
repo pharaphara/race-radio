@@ -141,6 +141,29 @@ Under its messages the coach offers buttons that speak for you: fixed ones (a de
 do today's session) and three follow-ups it suggests after each answer. Pressing one is the same as
 typing it; one that asks for a workout or a week opens a draft, published only on Publier.
 
+## Several athletes
+
+One bot can coach several people, each in their own Telegram chat, with nothing shared between
+them: every row of their data carries their id, every query names it, and a test checks it.
+
+1. Add `RACE_RADIO_SECRET_KEY` to `.env` (`openssl rand -base64 32`, and keep it: it seals the
+   Intervals.icu keys your athletes give, and without it they cannot be opened again).
+2. `/inviter` gives a code, valid a week, used once, and a link that opens the bot with it.
+3. Your athlete sends it, then is guided in plain words: first name, an Intervals.icu account tied to
+   their watch, their athlete id and key (the message is deleted at once, the key checked and
+   sealed), and the sports they practise, which steer what the coach proposes on its own.
+
+| Administrator only | |
+|---|---|
+| `/inviter` · `/inviter gratuit` | an invitation, on your Claude subscription or on a free model |
+| `/athletes` | who is in, their model, their calls and cost this month |
+| `/modele Paul gratuit` · `/plafond Paul 5` | an athlete's model, and their monthly cap in dollars |
+| `/pause Paul` · `/reprendre Paul` | silence an athlete, and bring them back |
+| `/retirer Paul` | remove them and every trace of them here, after confirmation |
+
+Running the coach for others on your own Claude subscription may fall outside its terms; a free
+model, or an API key, is the clean way.
+
 ## Modules
 
 | Module | Job |

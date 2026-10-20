@@ -28,13 +28,17 @@ public final class AthleteDispatcher {
     static final String BY_INVITATION = "Ce coach fonctionne sur invitation. Si on t'a donné un code, envoie /start suivi du code.";
 
     private final AthleteRegistry registry;
+    private final CheckIn checkIn;
+    private final AdminCommands admin;
     private final TelegramClient telegram;
     private final Clock clock;
     private final Map<Long, Instant> answered = new ConcurrentHashMap<>();
     private final Map<Long, ExecutorService> queues = new ConcurrentHashMap<>();
 
-    public AthleteDispatcher(AthleteRegistry registry, TelegramClient telegram, Clock clock) {
+    public AthleteDispatcher(AthleteRegistry registry, CheckIn checkIn, AdminCommands admin, TelegramClient telegram, Clock clock) {
         this.registry = registry;
+        this.checkIn = checkIn;
+        this.admin = admin;
         this.telegram = telegram;
         this.clock = clock;
     }
@@ -55,7 +59,15 @@ public final class AthleteDispatcher {
     void handleNow(TelegramClient.Update u) {
         Optional<AthleteServices> athlete = registry.forChat(u.chatId());
         if (athlete.isPresent()) {
+            if (athlete.get().athlete().administrator() && admin.handles(u)) {
+                admin.handle(u, u.chatId());
+                return;
+            }
             athlete.get().router().handle(u);
+            return;
+        }
+        if (checkIn.concerns(u)) {
+            checkIn.handle(u);
             return;
         }
         stranger(u);

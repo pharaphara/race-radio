@@ -112,6 +112,20 @@ public final class CommandRouter {
     }
 
     private QuickReplies replies = new QuickReplies();
+    private java.util.function.Supplier<java.util.Set<String>> sports = java.util.Set::of;
+
+    /** The athlete's sports, so the examples of /aide are theirs. */
+    public CommandRouter withSports(java.util.function.Supplier<java.util.Set<String>> sports) {
+        this.sports = sports;
+        return this;
+    }
+
+    /** The help, its workout example taken in the athlete's own sports. */
+    String help() {
+        java.util.Set<String> s = sports.get();
+        return s.isEmpty() ? HELP : HELP.replace("/seance demain cap facile",
+                "/seance " + io.github.pharaphara.raceradio.bot.plan.Sports.examples(s).getFirst());
+    }
 
     /** The store behind the buttons that speak for the athlete, shared with the other senders. */
     public CommandRouter withReplies(QuickReplies replies) {
@@ -196,7 +210,7 @@ public final class CommandRouter {
             sessions.stopAmending();
         }
         String answer = switch (command) {
-            case "/start", "/aide", "/help" -> HELP + (dryRun ? "\n\nMode sec : rien n'est écrit dans Intervals.icu." : "");
+            case "/start", "/aide", "/help" -> help() + (dryRun ? "\n\nMode sec : rien n'est écrit dans Intervals.icu." : "");
             case "/forme" -> form();
             case "/aujourdhui" -> morning.run(false).message();
             case "/pourquoi" -> why();
@@ -241,7 +255,7 @@ public final class CommandRouter {
             case "/oubli" -> forget(text);
             default -> {
                 if (command.startsWith("/")) {
-                    yield "Commande inconnue.\n\n" + HELP;
+                    yield "Commande inconnue.\n\n" + help();
                 }
                 if (sessions.amending()) {
                     // The athlete pressed Modifier on a draft: this message is the change.

@@ -38,6 +38,9 @@ race-radio:
     refresh-token: ${STRAVA_REFRESH_TOKEN:}
   zone: Europe/Paris
   data-dir: ${RACE_RADIO_DATA_DIR:./data}
+  # Seals the Intervals.icu keys invited athletes give at check-in; without it, no invitation.
+  # Make one with: openssl rand -base64 32
+  secret-key: ${RACE_RADIO_SECRET_KEY:}
   temperament: COMMITTED
   telegram:
     token: ${TELEGRAM_TOKEN:}

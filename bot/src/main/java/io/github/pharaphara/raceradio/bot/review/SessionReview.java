@@ -409,7 +409,26 @@ public final class SessionReview {
         return this;
     }
 
+
+    /** The athlete's sports: recommendations stay within them unless the athlete brings up another. */
+    private java.util.function.Supplier<java.util.Set<String>> sports = java.util.Set::of;
+
+    public SessionReview withSports(java.util.function.Supplier<java.util.Set<String>> sports) {
+        this.sports = sports;
+        return this;
+    }
+
+    private String sportsRule() {
+        java.util.Set<String> s = sports.get();
+        return s.isEmpty() ? "" : "The athlete practises " + io.github.pharaphara.raceradio.bot.plan.Sports.french(s)
+                + ": recommend sessions in these sports only, unless the athlete brings up another.\n";
+    }
+
     String prompt(SessionFacts f, String activityName) {
+        return sportsRule() + promptWithoutSports(f, activityName);
+    }
+
+    private String promptWithoutSports(SessionFacts f, String activityName) {
         if (!structured) {
             return prose(f, activityName);
         }
