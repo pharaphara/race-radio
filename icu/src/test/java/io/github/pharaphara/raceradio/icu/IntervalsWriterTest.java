@@ -137,6 +137,29 @@ class IntervalsWriterTest {
     }
 
     @Test
+    void movingChangesOnlyTheDateOfTheCoachsOwnWorkout() {
+        responses.put("GET athlete/i42/events/7", "{\"id\":7,\"external_id\":\"race-radio-x\",\"category\":\"WORKOUT\","
+                + "\"start_date_local\":\"2026-10-23T00:00:00\"}");
+        assertThat(writer(IntervalsWriter.Mode.LIVE).moveOwnEvent(7, LocalDate.of(2026, 10, 23))).isPresent();
+        assertThat(requests).contains("PUT athlete/i42/events/7 {\"start_date_local\":\"2026-10-23T00:00:00\"}");
+    }
+
+    @Test
+    void aMoveTheCalendarDidNotTakeIsReported() {
+        responses.put("GET athlete/i42/events/7", "{\"id\":7,\"external_id\":\"race-radio-x\",\"start_date_local\":\"2026-10-22T00:00:00\"}");
+        assertThatThrownBy(() -> writer(IntervalsWriter.Mode.LIVE).moveOwnEvent(7, LocalDate.of(2026, 10, 23)))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("new date");
+    }
+
+    @Test
+    void entriesNotCreatedByTheCoachAreNeverMoved() {
+        responses.put("GET athlete/i42/events/9", "{\"id\":9,\"external_id\":\"rot-abc\"}");
+        assertThatThrownBy(() -> writer(IntervalsWriter.Mode.LIVE).moveOwnEvent(9, DAY))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("not created by race-radio");
+        assertThat(requests).noneMatch(r -> r.startsWith("PUT"));
+    }
+
+    @Test
     void intervalsAreWrittenAsLabelledWorkBlocks() {
         writer(IntervalsWriter.Mode.LIVE).replaceIntervals("a1",
                 List.of(new io.github.pharaphara.raceradio.core.intervals.Block(900, 1380, 3.6)), List.of("Threshold 1/3"));
