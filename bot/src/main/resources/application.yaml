@@ -46,10 +46,17 @@ race-radio:
   model:
     # subscription: Claude Code command line, authenticated by `claude setup-token` and
     # CLAUDE_CODE_OAUTH_TOKEN. api: Anthropic API, billed per token, needs ANTHROPIC_API_KEY.
+    # openai: any OpenAI-compatible service (OpenRouter by default, OpenAI, Mistral, Groq, Ollama),
+    # at RACE_RADIO_MODEL_BASE_URL with RACE_RADIO_MODEL_API_KEY.
     transport: ${RACE_RADIO_MODEL_TRANSPORT:subscription}
     claude-command: ${CLAUDE_COMMAND:claude}
     api-key: ${ANTHROPIC_API_KEY:}
-    name: claude-sonnet-5-5
+    name: ${RACE_RADIO_MODEL:claude-sonnet-5-5}
+    base-url: ${RACE_RADIO_MODEL_BASE_URL:}
+    endpoint-key: ${RACE_RADIO_MODEL_API_KEY:}
+    # Asked when the first model fails, is out of quota or declines; empty for none.
+    fallback-transport: ${RACE_RADIO_MODEL_FALLBACK_TRANSPORT:}
+    fallback-name: ${RACE_RADIO_MODEL_FALLBACK:claude-sonnet-5-5}
     morning-effort: low
     review-effort: medium
     fallbacks: true

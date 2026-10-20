@@ -77,11 +77,25 @@ public class BotConfiguration {
 
     @Bean
     ModelTransport modelTransport() {
-        return switch (props.model().transport()) {
+        ModelTransport primary = transport(props.model().transport());
+        String fallback = props.model().fallbackTransport();
+        if (fallback == null || fallback.isBlank()) {
+            LOG.info("model: {} through {}", props.model().name(), props.model().transport());
+            return primary;
+        }
+        LOG.info("model: {} through {}, then {} through {}", props.model().name(), props.model().transport(),
+                props.model().fallbackName(), fallback);
+        return new io.github.pharaphara.raceradio.bot.llm.FallbackTransport(primary, transport(fallback), props.model().fallbackName());
+    }
+
+    private ModelTransport transport(String kind) {
+        return switch (kind.strip()) {
             case "subscription" -> new ClaudeCodeTransport(props.model().claudeCommand(),
                     props.dataDir().resolve("claude"), Duration.ofMinutes(5));
             case "api" -> new AnthropicTransport(props.model().apiKey());
-            default -> throw new IllegalStateException("race-radio.model.transport must be subscription or api");
+            case "openai", "openrouter" -> new io.github.pharaphara.raceradio.bot.llm.OpenAiCompatibleTransport(
+                    props.model().baseUrl(), props.model().endpointKey(), Duration.ofMinutes(3));
+            default -> throw new IllegalStateException("race-radio.model.transport must be subscription, api or openai, not " + kind);
         };
     }
 

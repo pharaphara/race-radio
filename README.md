@@ -45,6 +45,11 @@ subscription or an Anthropic API key.
 2. **Intervals.icu key.** Settings, Developer settings, API key. Your athlete id starts with `i`.
 3. **Claude.** With a subscription, run `claude setup-token` once on a machine with a browser and
    keep the token. With the API, an `ANTHROPIC_API_KEY`. Set one, not both.
+   Another model works too, through any service speaking the OpenAI chat format (OpenRouter by
+   default, OpenAI, Mistral, Groq, or a local Ollama): `RACE_RADIO_MODEL_TRANSPORT=openai`, the
+   model's name and key, and optionally a second model asked when the first fails or runs out of
+   quota (see `.env.example`). Every figure is computed in Java whatever the model; a smaller one
+   only words them less well, so compare before switching.
 4. **Watch sync.** In Intervals.icu, enable uploading planned workouts to Garmin. Without it a
    published workout never reaches the watch, and race-radio refuses to publish.
 5. **Configure and start.**
