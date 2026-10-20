@@ -5,11 +5,13 @@ spring:
   datasource:
     # WAL lets readers go on while one task writes; busy_timeout makes a second writer wait instead of
     # failing with SQLITE_BUSY (the archive refresh and the Strava harvest both write at start).
-    url: jdbc:sqlite:${race-radio.data-dir}/race-radio.db?journal_mode=WAL&busy_timeout=30000
+    # foreign_keys: removing an athlete removes their rows (ON DELETE CASCADE).
+    url: jdbc:sqlite:${race-radio.data-dir}/race-radio.db?journal_mode=WAL&busy_timeout=30000&foreign_keys=true
     driver-class-name: org.sqlite.JDBC
   sql:
     init:
-      mode: always
+      # The schema is applied by Database, which checks the version first.
+      mode: never
   main:
     banner-mode: off
 

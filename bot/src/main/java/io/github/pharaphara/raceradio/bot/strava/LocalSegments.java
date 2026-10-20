@@ -6,6 +6,7 @@ import io.github.pharaphara.raceradio.core.series.Samples;
 import io.github.pharaphara.raceradio.icu.model.ActivityStreams;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import io.github.pharaphara.raceradio.bot.store.AthleteDb;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.time.Clock;
@@ -31,12 +32,15 @@ public class LocalSegments {
     }
 
     private final JdbcTemplate jdbc;
+    /** Whose data this is: every query below names it. */
+    private final long athlete;
     private final SegmentLibrary library;
     private final StreamCache streams;
     private final Clock clock;
 
-    public LocalSegments(JdbcTemplate jdbc, SegmentLibrary library, StreamCache streams, Clock clock) {
-        this.jdbc = jdbc;
+    public LocalSegments(AthleteDb db, SegmentLibrary library, StreamCache streams, Clock clock) {
+        this.jdbc = db.jdbc();
+        this.athlete = db.id();
         this.library = library;
         this.streams = streams;
         this.clock = clock;
@@ -49,14 +53,15 @@ public class LocalSegments {
             return 0;
         }
         List<Map<String, Object>> rows = jdbc.queryForList("SELECT a.id, a.day FROM archive_activity a "
-                + "LEFT JOIN segment_scan s ON s.activity_id = a.id WHERE s.activity_id IS NULL OR s.segments <> ? "
-                + "ORDER BY a.day DESC LIMIT ?", known, max);
+                + "LEFT JOIN segment_scan s ON s.athlete_id = a.athlete_id AND s.activity_id = a.id "
+                + "WHERE a.athlete_id = ? AND (s.activity_id IS NULL OR s.segments <> ?) "
+                + "ORDER BY a.day DESC LIMIT ?", athlete, known, max);
         int done = 0;
         for (Map<String, Object> r : rows) {
             String id = (String) r.get("id");
             if (!streams.has(id)) {
-                jdbc.update("INSERT OR REPLACE INTO segment_scan (activity_id, segments, scanned_at) VALUES (?, ?, ?)",
-                        id, known, clock.instant().toString());
+                jdbc.update("INSERT OR REPLACE INTO segment_scan (athlete_id, activity_id, segments, scanned_at) VALUES (?, ?, ?, ?)",
+                        athlete, id, known, clock.instant().toString());
                 continue;
             }
             try {
@@ -74,16 +79,16 @@ public class LocalSegments {
         List<SegmentLibrary.Found> found = library.passages(s);
         Optional<Samples> watts = s.get("watts");
         Optional<Samples> hr = s.get("heartrate").map(HeartRate::clean);
-        jdbc.update("DELETE FROM local_effort WHERE activity_id = ?", activityId);
+        jdbc.update("DELETE FROM local_effort WHERE athlete_id = ? AND activity_id = ?", athlete, activityId);
         for (SegmentLibrary.Found f : found) {
             int from = f.passage().start();
             int to = f.passage().end() + 1;
-            jdbc.update("INSERT OR REPLACE INTO local_effort (activity_id, segment_id, start_index, day, seconds, watts, heart_rate) "
-                            + "VALUES (?, ?, ?, ?, ?, ?, ?)", activityId, f.segment().id(), from, day.toString(), f.passage().seconds(),
+            jdbc.update("INSERT OR REPLACE INTO local_effort (athlete_id, activity_id, segment_id, start_index, day, seconds, watts, "
+                            + "heart_rate) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", athlete, activityId, f.segment().id(), from, day.toString(), f.passage().seconds(),
                     watts.map(w -> mean(w, from, to)).orElse(null), hr.map(h -> mean(h, from, to)).orElse(null));
         }
-        jdbc.update("INSERT OR REPLACE INTO segment_scan (activity_id, segments, scanned_at) VALUES (?, ?, ?)",
-                activityId, library.segments().size(), clock.instant().toString());
+        jdbc.update("INSERT OR REPLACE INTO segment_scan (athlete_id, activity_id, segments, scanned_at) VALUES (?, ?, ?, ?)",
+                athlete, activityId, library.segments().size(), clock.instant().toString());
         return found;
     }
 
@@ -92,12 +97,13 @@ public class LocalSegments {
         List<Effort> out = new ArrayList<>();
         java.util.Set<String> stravaDays = new java.util.HashSet<>();
         for (Map<String, Object> r : jdbc.queryForList("SELECT day, elapsed_seconds, average_watts, average_hr FROM strava_effort "
-                + "WHERE segment_id = ?", segmentId)) {
+                + "WHERE athlete_id = ? AND segment_id = ?", athlete, segmentId)) {
             stravaDays.add((String) r.get("day"));
             out.add(new Effort(LocalDate.parse((String) r.get("day")), ((Number) r.get("elapsed_seconds")).doubleValue(),
                     number(r.get("average_watts")), number(r.get("average_hr"))));
         }
-        for (Map<String, Object> r : jdbc.queryForList("SELECT day, seconds, watts, heart_rate FROM local_effort WHERE segment_id = ?", segmentId)) {
+        for (Map<String, Object> r : jdbc.queryForList("SELECT day, seconds, watts, heart_rate FROM local_effort WHERE athlete_id = ? AND segment_id = ?",
+                athlete, segmentId)) {
             if (!stravaDays.contains((String) r.get("day"))) {
                 out.add(new Effort(LocalDate.parse((String) r.get("day")), ((Number) r.get("seconds")).doubleValue(),
                         number(r.get("watts")), number(r.get("heart_rate"))));
@@ -114,7 +120,8 @@ public class LocalSegments {
     public List<String> notable(String activityId, int max) {
         List<String> lines = new ArrayList<>();
         for (Map<String, Object> r : jdbc.queryForList("SELECT e.segment_id, e.day, e.seconds, s.name FROM local_effort e "
-                + "JOIN strava_segment s ON s.id = e.segment_id WHERE e.activity_id = ? ORDER BY e.start_index", activityId)) {
+                + "JOIN segment s ON s.id = e.segment_id WHERE e.athlete_id = ? AND e.activity_id = ? ORDER BY e.start_index",
+                athlete, activityId)) {
             long segment = ((Number) r.get("segment_id")).longValue();
             double seconds = ((Number) r.get("seconds")).doubleValue();
             LocalDate day = LocalDate.parse((String) r.get("day"));

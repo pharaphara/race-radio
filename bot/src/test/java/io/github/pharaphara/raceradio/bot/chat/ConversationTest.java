@@ -1,5 +1,6 @@
 package io.github.pharaphara.raceradio.bot.chat;
 
+import io.github.pharaphara.raceradio.bot.store.AthleteDb;
 import io.github.pharaphara.raceradio.bot.TestDb;
 import io.github.pharaphara.raceradio.bot.config.RaceRadioProperties;
 import io.github.pharaphara.raceradio.bot.llm.CoachModel;
@@ -49,7 +50,7 @@ class ConversationTest {
     @TempDir
     Path dir;
 
-    private JdbcTemplate jdbc;
+    private AthleteDb jdbc;
     private final List<String> prompts = new ArrayList<>();
     private String budget = "10";
 

@@ -47,6 +47,8 @@ public class RunOnce implements ApplicationRunner {
     private final io.github.pharaphara.raceradio.bot.store.Conversations memory;
     private final io.github.pharaphara.raceradio.bot.strava.Calibration calibration;
 
+    private final io.github.pharaphara.raceradio.bot.store.Database.Outcome database;
+
     public RunOnce(@Value("${race-radio.once:}") String once, MorningCheck morning, SessionReview review,
                    IntervalsClient intervals, ConfigurableApplicationContext context, RaceRadioProperties props,
                    io.github.pharaphara.raceradio.bot.strength.BoardReader boards,
@@ -56,7 +58,9 @@ public class RunOnce implements ApplicationRunner {
                    io.github.pharaphara.raceradio.bot.strava.StravaHarvest strava,
                    io.github.pharaphara.raceradio.bot.chat.Conversation conversation,
                    io.github.pharaphara.raceradio.bot.store.Conversations memory,
-                   io.github.pharaphara.raceradio.bot.strava.Calibration calibration) {
+                   io.github.pharaphara.raceradio.bot.strava.Calibration calibration,
+                   io.github.pharaphara.raceradio.bot.store.Database.Outcome database) {
+        this.database = database;
         this.calibration = calibration;
         this.conversation = conversation;
         this.memory = memory;
@@ -78,7 +82,10 @@ public class RunOnce implements ApplicationRunner {
         if (once.isBlank()) {
             return;
         }
-        if (once.equals("morning")) {
+        if (once.equals("reset")) {
+            // The move itself was made when the database was prepared, before anything opened it.
+            System.out.println("\n" + database.report());
+        } else if (once.equals("morning")) {
             MorningCheck.Outcome o = morning.run(false);
             print(o.message(), o.worded(), "score " + o.readiness().score() + "/100");
         } else if (once.startsWith("review:")) {
@@ -139,7 +146,7 @@ public class RunOnce implements ApplicationRunner {
             byte[] chart = morning.fitnessChart();
             save("fitness", chart == null ? java.util.List.of() : java.util.List.of(chart));
         } else {
-            throw new IllegalArgumentException("race-radio.once must be morning, fitness, archive, strava, calibrate, note:<text>, ask:<message>, trend:<metric>, "
+            throw new IllegalArgumentException("race-radio.once must be reset, morning, fitness, archive, strava, calibrate, note:<text>, ask:<message>, trend:<metric>, "
                     + "review:<activity id>, photo:<file>, session:<request> or week:<request>");
         }
         System.exit(SpringApplication.exit(context, () -> 0));

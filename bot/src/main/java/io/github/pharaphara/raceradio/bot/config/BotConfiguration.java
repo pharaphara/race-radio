@@ -60,6 +60,32 @@ public class BotConfiguration {
         return Clock.system(props.zone());
     }
 
+    /** The database file brought to the current schema before the pool opens it. */
+    @Bean
+    io.github.pharaphara.raceradio.bot.store.Database.Outcome database(
+            @org.springframework.beans.factory.annotation.Value("${race-radio.once:}") String once) {
+        var outcome = io.github.pharaphara.raceradio.bot.store.Database.prepare(props.dataDir().resolve("race-radio.db"),
+                new io.github.pharaphara.raceradio.bot.store.Database.Administrator(props.telegram().allowedChatId(),
+                        props.intervals().athleteId()), "reset".equals(once));
+        LOG.info("database: {}", outcome.action());
+        return outcome;
+    }
+
+    /** Declared here so that nothing reaches the database before it is prepared. */
+    @Bean
+    org.springframework.jdbc.core.JdbcTemplate jdbcTemplate(javax.sql.DataSource dataSource,
+                                                            io.github.pharaphara.raceradio.bot.store.Database.Outcome database) {
+        return new org.springframework.jdbc.core.JdbcTemplate(dataSource);
+    }
+
+    /** The administrator's view of the database; the only athlete until athletes can be invited. */
+    @Bean
+    io.github.pharaphara.raceradio.bot.store.AthleteDb administratorDb(org.springframework.jdbc.core.JdbcTemplate jdbc,
+                                                                       io.github.pharaphara.raceradio.bot.store.Database.Outcome database) {
+        return new io.github.pharaphara.raceradio.bot.store.AthleteDb(jdbc,
+                new io.github.pharaphara.raceradio.bot.athlete.AthleteId(database.administratorId()));
+    }
+
     @Bean
     IntervalsClient intervalsClient() {
         return new IntervalsClient(new IntervalsCredentials(props.intervals().athleteId(), props.intervals().apiKey()));
@@ -134,7 +160,7 @@ public class BotConfiguration {
     }
 
     @Bean
-    io.github.pharaphara.raceradio.bot.strava.StravaClient stravaClient(org.springframework.jdbc.core.JdbcTemplate jdbc, Clock clock,
+    io.github.pharaphara.raceradio.bot.strava.StravaClient stravaClient(io.github.pharaphara.raceradio.bot.store.AthleteDb jdbc, Clock clock,
             @org.springframework.beans.factory.annotation.Value("${race-radio.strava.client-id:}") String id,
             @org.springframework.beans.factory.annotation.Value("${race-radio.strava.client-secret:}") String secret,
             @org.springframework.beans.factory.annotation.Value("${race-radio.strava.refresh-token:}") String refresh) {
@@ -143,12 +169,12 @@ public class BotConfiguration {
 
     @Bean
     io.github.pharaphara.raceradio.bot.strava.StravaHarvest stravaHarvest(io.github.pharaphara.raceradio.bot.strava.StravaClient strava,
-                                                                        org.springframework.jdbc.core.JdbcTemplate jdbc, Clock clock) {
+                                                                        io.github.pharaphara.raceradio.bot.store.AthleteDb jdbc, Clock clock) {
         return new io.github.pharaphara.raceradio.bot.strava.StravaHarvest(strava, jdbc, clock);
     }
 
     @Bean
-    io.github.pharaphara.raceradio.bot.strava.Segments segments(org.springframework.jdbc.core.JdbcTemplate jdbc,
+    io.github.pharaphara.raceradio.bot.strava.Segments segments(io.github.pharaphara.raceradio.bot.store.AthleteDb jdbc,
                                                               io.github.pharaphara.raceradio.bot.strava.StravaHarvest harvest,
                                                               TelegramClient telegram,
                                                               io.github.pharaphara.raceradio.bot.strava.LocalSegments local,
@@ -159,7 +185,7 @@ public class BotConfiguration {
     }
 
     @Bean
-    io.github.pharaphara.raceradio.bot.strava.LocalSegments localSegments(org.springframework.jdbc.core.JdbcTemplate jdbc,
+    io.github.pharaphara.raceradio.bot.strava.LocalSegments localSegments(io.github.pharaphara.raceradio.bot.store.AthleteDb jdbc,
                                                                         io.github.pharaphara.raceradio.bot.strava.SegmentLibrary library,
                                                                         io.github.pharaphara.raceradio.bot.archive.StreamCache streams, Clock clock) {
         return new io.github.pharaphara.raceradio.bot.strava.LocalSegments(jdbc, library, streams, clock);
@@ -171,7 +197,7 @@ public class BotConfiguration {
     }
 
     @Bean
-    io.github.pharaphara.raceradio.bot.strava.Calibration calibration(org.springframework.jdbc.core.JdbcTemplate jdbc,
+    io.github.pharaphara.raceradio.bot.strava.Calibration calibration(io.github.pharaphara.raceradio.bot.store.AthleteDb jdbc,
                                                                     io.github.pharaphara.raceradio.bot.strava.SegmentLibrary library,
                                                                     io.github.pharaphara.raceradio.bot.archive.StreamCache streams) {
         return new io.github.pharaphara.raceradio.bot.strava.Calibration(jdbc, library, streams);
@@ -183,7 +209,7 @@ public class BotConfiguration {
     }
 
     @Bean
-    io.github.pharaphara.raceradio.bot.archive.Archive archive(org.springframework.jdbc.core.JdbcTemplate jdbc, IntervalsClient intervals,
+    io.github.pharaphara.raceradio.bot.archive.Archive archive(io.github.pharaphara.raceradio.bot.store.AthleteDb jdbc, IntervalsClient intervals,
                                                              io.github.pharaphara.raceradio.bot.archive.StreamCache streams, Clock clock) {
         return new io.github.pharaphara.raceradio.bot.archive.Archive(jdbc, intervals, streams, clock);
     }
@@ -289,7 +315,7 @@ public class BotConfiguration {
     io.github.pharaphara.raceradio.bot.plan.Adapter adapter(IntervalsClient intervals, IntervalsWriter writer,
                                                           io.github.pharaphara.raceradio.bot.store.Plans plans,
                                                           io.github.pharaphara.raceradio.bot.plan.Planner planner,
-                                                          org.springframework.jdbc.core.JdbcTemplate jdbc, Clock clock) {
+                                                          io.github.pharaphara.raceradio.bot.store.AthleteDb jdbc, Clock clock) {
         return new io.github.pharaphara.raceradio.bot.plan.Adapter(intervals, writer, plans, planner, jdbc, clock);
     }
 

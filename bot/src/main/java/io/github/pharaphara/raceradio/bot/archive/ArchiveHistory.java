@@ -17,7 +17,7 @@ public final class ArchiveHistory implements History {
     private static final String WELLNESS = "SELECT day, json_extract(json, '$.hrv') AS hrv, json_extract(json, '$.restingHR') AS rhr, "
             + "json_extract(json, '$.sleepSecs') AS sleep, json_extract(json, '$.sleepScore') AS score, "
             + "json_extract(json, '$.weight') AS weight, json_extract(json, '$.ctl') AS fitness, json_extract(json, '$.atl') AS fatigue "
-            + "FROM archive_wellness ";
+            + "FROM archive_wellness WHERE athlete_id = ? AND ";
 
     private final Archive archive;
     private final Trends trends;
@@ -30,7 +30,7 @@ public final class ArchiveHistory implements History {
     @Override
     public List<String> recentDays(int days) {
         String from = archive.today().minusDays(days).toString();
-        return archive.jdbc().queryForList(WELLNESS + "WHERE day >= ? ORDER BY day", from).stream()
+        return archive.jdbc().queryForList(WELLNESS + "day >= ? ORDER BY day", archive.athlete(), from).stream()
                 .map(ArchiveHistory::morning).filter(s -> !s.isEmpty()).toList();
     }
 
@@ -42,13 +42,14 @@ public final class ArchiveHistory implements History {
     @Override
     public Optional<String> day(LocalDate day) {
         List<String> lines = new ArrayList<>();
-        archive.jdbc().queryForList(WELLNESS + "WHERE day = ?", day.toString()).stream()
+        archive.jdbc().queryForList(WELLNESS + "day = ?", archive.athlete(), day.toString()).stream()
                 .map(ArchiveHistory::morning).filter(s -> !s.isEmpty())
                 .forEach(s -> lines.add("Matin : " + s.substring(11)));
         archive.jdbc().queryForList("SELECT json_extract(json, '$.name') AS name, type, json_extract(json, '$.moving_time') AS t, "
                         + "json_extract(json, '$.icu_training_load') AS load, json_extract(json, '$.average_heartrate') AS hr, "
                         + "json_extract(json, '$.icu_weighted_avg_watts') AS wap, json_extract(json, '$.distance') AS dist "
-                        + "FROM archive_activity WHERE day = ? ORDER BY json_extract(json, '$.start_date_local')", day.toString())
+                        + "FROM archive_activity WHERE athlete_id = ? AND day = ? ORDER BY json_extract(json, '$.start_date_local')",
+                        archive.athlete(), day.toString())
                 .forEach(r -> lines.add("Séance : « " + r.get("name") + " » " + r.get("type")
                         + (r.get("t") instanceof Number n ? ", " + n.intValue() / 60 + " min" : "")
                         + (r.get("dist") instanceof Number d && d.doubleValue() > 0 ? String.format(Locale.FRANCE, ", %.1f km", d.doubleValue() / 1000) : "")
@@ -110,8 +111,9 @@ public final class ArchiveHistory implements History {
         LocalDate today = archive.today();
         return archive.jdbc().queryForList("SELECT day, json_extract(json, '$.category') AS cat, json_extract(json, '$.type') AS type, "
                         + "json_extract(json, '$.name') AS name, json_extract(json, '$.description') AS description "
-                        + "FROM archive_event WHERE day >= ? AND day < ? AND json_extract(json, '$.category') = 'WORKOUT' ORDER BY day",
-                today.toString(), today.plusDays(days).toString()).stream()
+                        + "FROM archive_event WHERE athlete_id = ? AND day >= ? AND day < ? AND json_extract(json, '$.category') = 'WORKOUT' "
+                        + "ORDER BY day",
+                archive.athlete(), today.toString(), today.plusDays(days).toString()).stream()
                 .map(r -> r.get("day") + " " + r.get("type") + " « " + r.get("name") + " »\n"
                         + (r.get("description") instanceof String d ? (d.length() > 1_200 ? d.substring(0, 1_200) : d) : ""))
                 .toList();
@@ -120,8 +122,8 @@ public final class ArchiveHistory implements History {
     /** Each session of a day as label to value, in reading order. */
     private List<Map<String, String>> sessions(LocalDate day) {
         List<Map<String, String>> out = new ArrayList<>();
-        for (Map<String, Object> r : archive.jdbc().queryForList("SELECT id, json FROM archive_activity WHERE day = ? "
-                + "ORDER BY json_extract(json, '$.start_date_local')", day.toString())) {
+        for (Map<String, Object> r : archive.jdbc().queryForList("SELECT id, json FROM archive_activity WHERE athlete_id = ? AND day = ? "
+                + "ORDER BY json_extract(json, '$.start_date_local')", archive.athlete(), day.toString())) {
             tools.jackson.databind.JsonNode a = JSON.readTree((String) r.get("json"));
             String type = a.path("type").asString();
             boolean run = type.contains("Run");
@@ -143,7 +145,8 @@ public final class ArchiveHistory implements History {
             put(m, "Intensité", a.path("icu_intensity"), v -> Math.round(v) + " %");
             put(m, "Température", a.path("average_temp"), v -> String.format(Locale.FRANCE, "%.0f °C", v));
             put(m, "RPE (montre)", a.path("icu_rpe"), v -> Math.round(v) + "/10");
-            for (Map<String, Object> c : archive.jdbc().queryForList("SELECT metric, value FROM computed_metric WHERE activity_id = ?", r.get("id"))) {
+            for (Map<String, Object> c : archive.jdbc().queryForList("SELECT metric, value FROM computed_metric WHERE athlete_id = ? AND activity_id = ?",
+                    archive.athlete(), r.get("id"))) {
                 String key = (String) c.get("metric");
                 double v = ((Number) c.get("value")).doubleValue();
                 String label = COMPUTED.get(key);

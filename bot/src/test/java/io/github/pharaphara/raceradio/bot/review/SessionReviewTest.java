@@ -1,5 +1,6 @@
 package io.github.pharaphara.raceradio.bot.review;
 
+import io.github.pharaphara.raceradio.bot.store.AthleteDb;
 import io.github.pharaphara.raceradio.bot.TestDb;
 import io.github.pharaphara.raceradio.bot.config.RaceRadioProperties;
 import io.github.pharaphara.raceradio.bot.llm.CoachModel;
@@ -41,7 +42,7 @@ class SessionReviewTest {
     @TempDir
     Path dir;
 
-    private JdbcTemplate jdbc;
+    private AthleteDb jdbc;
     private final List<String> writes = new ArrayList<>();
     private final List<String> prompts = new ArrayList<>();
     private ReviewFixtures.FakeIntervals icu;

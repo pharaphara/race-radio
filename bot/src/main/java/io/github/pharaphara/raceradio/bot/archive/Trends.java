@@ -125,10 +125,10 @@ public final class Trends {
 
     List<Trend.Point> points(Metric m, LocalDate from, LocalDate to) {
         String sql = m.group() == Group.DAILY
-                ? "SELECT w.day AS day, " + m.sql() + " AS v FROM archive_wellness w WHERE w.day BETWEEN ? AND ?"
-                : "SELECT a.day AS day, " + m.sql() + " AS v FROM archive_activity a WHERE a.type IN (" + m.group().types
-                + ") AND a.day BETWEEN ? AND ? AND (" + m.filter() + ")";
-        return archive.jdbc().queryForList(sql, from.toString(), to.toString()).stream()
+                ? "SELECT w.day AS day, " + m.sql() + " AS v FROM archive_wellness w WHERE w.athlete_id = ? AND w.day BETWEEN ? AND ?"
+                : "SELECT a.day AS day, " + m.sql() + " AS v FROM archive_activity a WHERE a.athlete_id = ? AND a.type IN ("
+                + m.group().types + ") AND a.day BETWEEN ? AND ? AND (" + m.filter() + ")";
+        return archive.jdbc().queryForList(sql, archive.athlete(), from.toString(), to.toString()).stream()
                 .filter(row -> row.get("v") instanceof Number)
                 .map(row -> new Trend.Point(LocalDate.parse((String) row.get("day")), ((Number) row.get("v")).doubleValue()))
                 .filter(pt -> pt.value() > 0 || m.key().endsWith("derive"))

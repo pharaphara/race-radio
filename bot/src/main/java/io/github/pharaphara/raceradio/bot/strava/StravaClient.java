@@ -1,5 +1,6 @@
 package io.github.pharaphara.raceradio.bot.strava;
 
+import io.github.pharaphara.raceradio.bot.store.AthleteDb;
 import org.springframework.jdbc.core.JdbcTemplate;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -53,6 +54,8 @@ public class StravaClient {
     private final String clientSecret;
     private final String envRefreshToken;
     private final JdbcTemplate jdbc;
+    /** Whose data this is: every query below names it. */
+    private final long athlete;
     private final HttpClient http;
     private final Clock clock;
     private String accessToken;
@@ -62,17 +65,18 @@ public class StravaClient {
     private Instant usageAt = Instant.EPOCH;
     private int[] limit = {100, 1000};
 
-    public StravaClient(String clientId, String clientSecret, String refreshToken, JdbcTemplate jdbc, Clock clock) {
-        this(clientId, clientSecret, refreshToken, jdbc, clock, API, TOKEN);
+    public StravaClient(String clientId, String clientSecret, String refreshToken, AthleteDb db, Clock clock) {
+        this(clientId, clientSecret, refreshToken, db, clock, API, TOKEN);
     }
 
-    StravaClient(String clientId, String clientSecret, String refreshToken, JdbcTemplate jdbc, Clock clock, URI api, URI token) {
+    StravaClient(String clientId, String clientSecret, String refreshToken, AthleteDb db, Clock clock, URI api, URI token) {
         this.api = api;
         this.token = token;
         this.clientId = clientId;
         this.clientSecret = clientSecret;
         this.envRefreshToken = refreshToken;
-        this.jdbc = jdbc;
+        this.jdbc = db.jdbc();
+        this.athlete = db.id();
         this.clock = clock;
         this.http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
     }
@@ -155,14 +159,14 @@ public class StravaClient {
         accessExpires = Instant.ofEpochSecond(t.path("expires_at").asLong());
         String rotated = t.path("refresh_token").asString();
         if (!blank(rotated) && !rotated.equals(refreshToken())) {
-            jdbc.update("INSERT INTO setting (key, value) VALUES ('strava.refresh_token', ?) "
-                    + "ON CONFLICT(key) DO UPDATE SET value = excluded.value", rotated);
+            jdbc.update("INSERT INTO setting (athlete_id, key, value) VALUES (?, 'strava.refresh_token', ?) "
+                    + "ON CONFLICT(athlete_id, key) DO UPDATE SET value = excluded.value", athlete, rotated);
         }
         return accessToken;
     }
 
     private String refreshToken() {
-        List<String> kept = jdbc.queryForList("SELECT value FROM setting WHERE key = 'strava.refresh_token'", String.class);
+        List<String> kept = jdbc.queryForList("SELECT value FROM setting WHERE athlete_id = ? AND key = 'strava.refresh_token'", String.class, athlete);
         return kept.isEmpty() ? envRefreshToken : kept.getFirst();
     }
 

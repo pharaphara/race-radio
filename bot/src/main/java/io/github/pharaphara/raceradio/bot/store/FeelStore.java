@@ -14,23 +14,26 @@ import java.util.Optional;
 public class FeelStore {
 
     private final JdbcTemplate jdbc;
+    /** Whose data this is: every query below names it. */
+    private final long athlete;
 
-    public FeelStore(JdbcTemplate jdbc) {
-        this.jdbc = jdbc;
+    public FeelStore(AthleteDb db) {
+        this.jdbc = db.jdbc();
+        this.athlete = db.id();
     }
 
     public void save(LocalDate day, Feel f, Instant at) {
         jdbc.update("""
-                INSERT INTO feel (day, sleep, energy, soreness, mood, appetite, at) VALUES (?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(day) DO UPDATE SET sleep = excluded.sleep, energy = excluded.energy,
+                INSERT INTO feel (athlete_id, day, sleep, energy, soreness, mood, appetite, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(athlete_id, day) DO UPDATE SET sleep = excluded.sleep, energy = excluded.energy,
                     soreness = excluded.soreness, mood = excluded.mood, appetite = excluded.appetite, at = excluded.at""",
-                day.toString(), f.sleep(), f.energy(), f.soreness(), f.mood(), f.appetite(), at.toString());
+                athlete, day.toString(), f.sleep(), f.energy(), f.soreness(), f.mood(), f.appetite(), at.toString());
     }
 
     public Optional<Feel> on(LocalDate day) {
-        return jdbc.query("SELECT sleep, energy, soreness, mood, appetite FROM feel WHERE day = ?",
+        return jdbc.query("SELECT sleep, energy, soreness, mood, appetite FROM feel WHERE athlete_id = ? AND day = ?",
                 (rs, i) -> new Feel(rs.getInt(1), rs.getInt(2), rs.getInt(3), rs.getInt(4), rs.getInt(5)),
-                day.toString()).stream().findFirst();
+                athlete, day.toString()).stream().findFirst();
     }
 
     /**

@@ -7,6 +7,7 @@ import io.github.pharaphara.raceradio.charts.Png;
 import io.github.pharaphara.raceradio.charts.Theme;
 import io.github.pharaphara.raceradio.core.segments.Geo;
 import io.github.pharaphara.raceradio.core.segments.SegmentMatcher;
+import io.github.pharaphara.raceradio.bot.store.AthleteDb;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.text.Normalizer;
@@ -39,6 +40,8 @@ public final class Segments {
     }
 
     private final JdbcTemplate jdbc;
+    /** Whose data this is: every query below names it. */
+    private final long athlete;
     private final StravaHarvest harvest;
     private final TelegramClient telegram;
     private final long chatId;
@@ -47,8 +50,9 @@ public final class Segments {
     private StreamCache streams;
     private Clock clock = Clock.systemDefaultZone();
 
-    public Segments(JdbcTemplate jdbc, StravaHarvest harvest, TelegramClient telegram, long chatId) {
-        this.jdbc = jdbc;
+    public Segments(AthleteDb db, StravaHarvest harvest, TelegramClient telegram, long chatId) {
+        this.jdbc = db.jdbc();
+        this.athlete = db.id();
         this.harvest = harvest;
         this.telegram = telegram;
         this.chatId = chatId;
@@ -103,7 +107,7 @@ public final class Segments {
         }
         harvest.ended().ifPresent(d -> b.append("Strava ne donne plus tes passages depuis le ").append(DAY.format(d))
                 .append(" : je les chronomètre moi-même sur ta trace GPS.\n\n"));
-        List<Map<String, Object>> top = jdbc.queryForList("SELECT id, name FROM strava_segment").stream()
+        List<Map<String, Object>> top = jdbc.queryForList("SELECT id, name FROM segment").stream()
                 .map(s -> {
                     List<Effort> e = efforts(((Number) s.get("id")).longValue());
                     return Map.<String, Object>of("name", s.get("name"), "n", e.size(),
@@ -145,8 +149,8 @@ public final class Segments {
         if (to - from < 60) {
             return "Un segment dure au moins une minute.";
         }
-        List<Map<String, Object>> activities = jdbc.queryForList("SELECT id FROM archive_activity WHERE day = ? "
-                + "ORDER BY json_extract(json, '$.moving_time') DESC", day.toString());
+        List<Map<String, Object>> activities = jdbc.queryForList("SELECT id FROM archive_activity WHERE athlete_id = ? AND day = ? "
+                + "ORDER BY json_extract(json, '$.moving_time') DESC", athlete, day.toString());
         for (Map<String, Object> a : activities) {
             String id = (String) a.get("id");
             var track = SegmentLibrary.track(streams.get(id));
@@ -167,11 +171,11 @@ public final class Segments {
             for (int i = 1; i < points.size(); i++) {
                 metres += Geo.distance(points.get(i - 1)[0], points.get(i - 1)[1], points.get(i)[0], points.get(i)[1]);
             }
-            Long min = jdbc.queryForObject("SELECT MIN(id) FROM strava_segment", Long.class);
+            Long min = jdbc.queryForObject("SELECT MIN(id) FROM segment", Long.class);
             long newId = Math.min(-1, (min == null ? 0 : min) - 1);
             Map<String, Object> detail = Map.of("name", name, "distance", Math.round(metres), "points", points, "custom", true);
-            jdbc.update("INSERT INTO strava_segment (id, name, detail, fetched_at) VALUES (?, ?, ?, ?)",
-                    newId, name, JSON.writeValueAsString(detail), clock.instant().toString());
+            jdbc.update("INSERT INTO segment (id, origin, name, detail, fetched_at, added_by) VALUES (?, 'custom', ?, ?, ?, ?)",
+                    newId, name, JSON.writeValueAsString(detail), clock.instant().toString(), athlete);
             library.reload();
             int scanned = local.scanPending(Integer.MAX_VALUE);
             List<Effort> efforts = efforts(newId);
@@ -184,7 +188,7 @@ public final class Segments {
 
     private List<Map<String, Object>> find(String words) {
         String q = plain(words);
-        return jdbc.queryForList("SELECT id, name FROM strava_segment").stream()
+        return jdbc.queryForList("SELECT id, name FROM segment").stream()
                 .map(r -> Map.<String, Object>of("id", r.get("id"), "name", r.get("name"), "n", efforts(((Number) r.get("id")).longValue()).size()))
                 .filter(r -> (Integer) r.get("n") > 0 && plain((String) r.get("name")).contains(q))
                 .sorted(Comparator.comparingInt((Map<String, Object> r) -> (Integer) r.get("n")).reversed())
@@ -196,8 +200,8 @@ public final class Segments {
             return local.history(segmentId).stream()
                     .map(e -> new Effort(e.day(), (int) Math.round(e.seconds()), e.watts(), e.heartRate())).toList();
         }
-        return jdbc.queryForList("SELECT day, elapsed_seconds, average_watts, average_hr FROM strava_effort WHERE segment_id = ? ORDER BY day",
-                segmentId).stream().map(r -> new Effort(LocalDate.parse((String) r.get("day")), ((Number) r.get("elapsed_seconds")).intValue(),
+        return jdbc.queryForList("SELECT day, elapsed_seconds, average_watts, average_hr FROM strava_effort "
+                + "WHERE athlete_id = ? AND segment_id = ? ORDER BY day", athlete, segmentId).stream().map(r -> new Effort(LocalDate.parse((String) r.get("day")), ((Number) r.get("elapsed_seconds")).intValue(),
                 r.get("average_watts") instanceof Number w ? w.doubleValue() : null,
                 r.get("average_hr") instanceof Number h ? h.doubleValue() : null)).toList();
     }

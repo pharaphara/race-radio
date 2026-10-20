@@ -99,6 +99,19 @@ subscription or an Anthropic API key.
 The local archive (`/data`) keeps every activity and wellness day as Intervals.icu sent them, and
 each activity's streams once: questions about any period are answered without calling it again.
 
+**Upgrading an installation from before athletes.** The database now holds several athletes, and a
+database from before refuses to start, untouched, with an explanation. Move it once, then start as
+usual:
+
+```bash
+docker compose stop race-radio
+docker compose run --rm race-radio --race-radio.once=reset
+docker compose up -d
+```
+
+The old file stays next to the new one as `race-radio.db.before-athletes`; every row is copied to the
+administrator (you), and the reset reports the rows of each table before and after.
+
 ## On Telegram
 
 | Command | |

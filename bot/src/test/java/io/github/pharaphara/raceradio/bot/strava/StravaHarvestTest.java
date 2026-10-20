@@ -1,5 +1,6 @@
 package io.github.pharaphara.raceradio.bot.strava;
 
+import io.github.pharaphara.raceradio.bot.store.AthleteDb;
 import io.github.pharaphara.raceradio.bot.TestDb;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -29,7 +30,7 @@ class StravaHarvestTest {
         final List<String> calls = new ArrayList<>();
         int budget;
 
-        FakeStrava(JdbcTemplate jdbc, int budget) {
+        FakeStrava(AthleteDb jdbc, int budget) {
             super("1", "s", "r", jdbc, Clock.fixed(Instant.parse("2026-10-18T10:00:00Z"), ZoneOffset.UTC));
             this.budget = budget;
         }
@@ -65,7 +66,7 @@ class StravaHarvestTest {
 
     @Test
     void aHarvestStoppedByTheQuotaResumesWhereItStoppedAndEndsWithEveryTrace() {
-        JdbcTemplate jdbc = TestDb.in(dir);
+        AthleteDb jdbc = TestDb.in(dir);
         FakeStrava strava = new FakeStrava(jdbc, 2);
         Clock early = Clock.fixed(Instant.parse("2026-10-18T10:00:00Z"), ZoneOffset.UTC);
         StravaHarvest h = new StravaHarvest(strava, jdbc, early);
@@ -88,7 +89,7 @@ class StravaHarvestTest {
 
     @Test
     void theFirstListingGoesToTheLastPageEvenWhenTheQuotaCutsItBetweenRuns() {
-        JdbcTemplate jdbc = TestDb.in(dir);
+        AthleteDb jdbc = TestDb.in(dir);
         List<String> pages = new ArrayList<>();
         int[] budget = {1};
         StravaClient pager = new StravaClient("1", "s", "r", jdbc, Clock.systemUTC()) {
@@ -115,7 +116,7 @@ class StravaHarvestTest {
         budget[0] = 10;
         new StravaHarvest(pager, jdbc, Clock.systemUTC(), 1).listActivities();
         assertThat(pages).endsWith("athlete/activities?per_page=1&page=2", "athlete/activities?per_page=1&page=3");
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM strava_activity", Integer.class)).isEqualTo(2);
+        assertThat(jdbc.jdbc().queryForObject("SELECT COUNT(*) FROM strava_activity WHERE athlete_id = ?", Integer.class, jdbc.id())).isEqualTo(2);
 
         // Listed once to the end: next time, the first page without anything new is enough.
         budget[0] = 10;

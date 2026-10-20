@@ -22,35 +22,39 @@ public class Conversations {
     }
 
     private final JdbcTemplate jdbc;
+    /** Whose data this is: every query below names it. */
+    private final long athlete;
 
-    public Conversations(JdbcTemplate jdbc) {
-        this.jdbc = jdbc;
+    public Conversations(AthleteDb db) {
+        this.jdbc = db.jdbc();
+        this.athlete = db.id();
     }
 
     public void add(Instant at, String role, String text) {
-        jdbc.update("INSERT INTO conversation (at, role, text) VALUES (?, ?, ?)", at.toString(), role, text);
+        jdbc.update("INSERT INTO conversation (athlete_id, at, role, text) VALUES (?, ?, ?, ?)", athlete, at.toString(), role, text);
     }
 
     /** The last {@code n} turns, oldest first. */
     public List<Turn> last(int n) {
-        List<Turn> t = new ArrayList<>(jdbc.query("SELECT at, role, text FROM conversation ORDER BY id DESC LIMIT ?",
-                (rs, i) -> new Turn(rs.getString(1), rs.getString(2), rs.getString(3)), n));
+        List<Turn> t = new ArrayList<>(jdbc.query("SELECT at, role, text FROM conversation WHERE athlete_id = ? ORDER BY id DESC LIMIT ?",
+                (rs, i) -> new Turn(rs.getString(1), rs.getString(2), rs.getString(3)), athlete, n));
         java.util.Collections.reverse(t);
         return t;
     }
 
     public long addNote(Instant at, String text) {
-        jdbc.update("INSERT INTO note (at, text) VALUES (?, ?)", at.toString(), text);
-        Long id = jdbc.queryForObject("SELECT MAX(id) FROM note", Long.class);
+        Long id = jdbc.queryForObject("INSERT INTO note (athlete_id, at, text) VALUES (?, ?, ?) RETURNING id", Long.class,
+                athlete, at.toString(), text);
         return id == null ? 0 : id;
     }
 
     public List<Note> activeNotes() {
-        return jdbc.query("SELECT id, at, text FROM note WHERE active = 1 ORDER BY id",
-                (rs, i) -> new Note(rs.getLong(1), rs.getString(2), rs.getString(3)));
+        return jdbc.query("SELECT id, at, text FROM note WHERE athlete_id = ? AND active = 1 ORDER BY id",
+                (rs, i) -> new Note(rs.getLong(1), rs.getString(2), rs.getString(3)), athlete);
     }
 
     public boolean withdraw(long id) {
-        return jdbc.update("UPDATE note SET active = 0 WHERE id = ? AND active = 1", id) == 1;
+        // The athlete is part of the condition: a number typed at random never reaches another's note.
+        return jdbc.update("UPDATE note SET active = 0 WHERE athlete_id = ? AND id = ? AND active = 1", athlete, id) == 1;
     }
 }
