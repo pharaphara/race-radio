@@ -28,10 +28,16 @@ public class Schedules implements SchedulingConfigurer {
     private final RaceRadioProperties props;
     private final AthleteRegistry registry;
     private final StravaHarvest strava;
+    private final io.github.pharaphara.raceradio.bot.strava.ZoneHarvest zone;
+    private final io.github.pharaphara.raceradio.bot.strava.SegmentLibrary library;
     private final String once;
 
     public Schedules(RaceRadioProperties props, AthleteRegistry registry, StravaHarvest strava,
+                     io.github.pharaphara.raceradio.bot.strava.ZoneHarvest zone,
+                     io.github.pharaphara.raceradio.bot.strava.SegmentLibrary library,
                      @org.springframework.beans.factory.annotation.Value("${race-radio.once:}") String once) {
+        this.zone = zone;
+        this.library = library;
         this.props = props;
         this.registry = registry;
         this.strava = strava;
@@ -55,9 +61,21 @@ public class Schedules implements SchedulingConfigurer {
         // The local archive: a year of history once, in the background, then the last month every night.
         registrar.addCronTask(new CronTask(() -> each("archive refresh", j -> j.refreshArchive(30)), daily(LocalTime.of(3, 45))));
         Thread.ofVirtual().name("archive-backfill").start(() -> each("archive back-fill", AthleteJobs::backfill));
-        registrar.addCronTask(new CronTask(() -> each("segment scan", j -> j.scanSegments(500)), daily(LocalTime.of(4, 15))));
+        registrar.addCronTask(new CronTask(() -> {
+            // Segments added to the shared library during the day are timed on everyone's archive tonight.
+            library.reload();
+            each("segment scan", j -> j.scanSegments(500));
+        }, daily(LocalTime.of(4, 15))));
         // Strava segments, harvested within the read quota: a step every quarter hour, idle once done.
-        registrar.addFixedDelayTask(strava::run, java.time.Duration.ofMinutes(15));
+        // An area asked with /segment zone goes first, then the traces of every library segment.
+        registrar.addFixedDelayTask(() -> {
+            try {
+                zone.step();
+            } catch (RuntimeException e) {
+                LOG.warn("strava zone step failed: {}", e.getMessage());
+            }
+            strava.run();
+        }, java.time.Duration.ofMinutes(15));
     }
 
     /** The job for every active athlete, one after the other. */

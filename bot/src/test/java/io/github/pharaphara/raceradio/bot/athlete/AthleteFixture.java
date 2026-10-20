@@ -123,7 +123,7 @@ final class AthleteFixture implements AutoCloseable {
         };
         telegram = new TelegramClient("t", HttpClient.newHttpClient(), URI.create(base + "/"));
         shared = new AthleteServices.Shared(alex.jdbc(), telegram, clock, props, SystemPrompt.of("rules"), model,
-                new SegmentLibrary(alex.jdbc()), null, false, "", "", URI.create(base + "/api/v1/"), freeModel, "free/model");
+                new SegmentLibrary(alex.jdbc()), null, false, "", "", URI.create(base + "/api/v1/"), freeModel, "free/model", null);
         Athletes athletes = new Athletes(alex.jdbc());
         registry = new AthleteRegistry(athletes, shared, a -> a.administrator() || a.intervalsKey() == null ? "k" : box.open(a.intervalsKey()));
         invitations = new Invitations(alex.jdbc(), clock);

@@ -161,6 +161,11 @@ them: every row of their data carries their id, every query names it, and a test
 | `/secours Paul oui` | when the free model fails, your subscription answers for them instead of the computed text |
 | `/pause Paul` · `/reprendre Paul` | silence an athlete, and bring them back |
 | `/retirer Paul` | remove them and every trace of them here, after confirmation |
+| `/segment zone Meyrueis 20` · `/segment zone 44.18,3.43 20 course` | every Strava segment within 20 km of a place, added to the library everyone is timed on (a place is coordinates, or a word of one of your activities) |
+
+The segment library is shared: segments from your Strava harvest, drawn with `/segment nouveau` or
+found by `/segment zone` are everyone's, and each athlete is timed on them locally, from their own GPS.
+Your Strava times stay yours. Adding segments is the administrator's alone.
 
 Running the coach for others on your own Claude subscription may fall outside its terms; a free
 model, or an API key, is the clean way. For the free model, set `RACE_RADIO_FREE_MODEL_API_KEY`
