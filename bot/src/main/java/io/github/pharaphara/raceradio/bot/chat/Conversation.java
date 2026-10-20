@@ -110,7 +110,7 @@ public final class Conversation {
     }
 
     static final String SUGGESTIONS = "SUGGESTIONS:";
-    private static final java.util.regex.Pattern CREATE = java.util.regex.Pattern.compile("^(SEANCE|SEMAINE)\\b\\s*(.*)$", java.util.regex.Pattern.DOTALL);
+    private static final java.util.regex.Pattern CREATE = java.util.regex.Pattern.compile("^(SEANCE|SEMAINE|DEPLACER|MODIFIER)\\b\\s*(.*)$", java.util.regex.Pattern.DOTALL);
 
     /** A reply that asks the program to open a draft rather than to answer. */
     static Optional<Action> action(String reply) {
@@ -184,7 +184,7 @@ public final class Conversation {
         return """
                 Task: answer the athlete's message below, in French, for Telegram.
                 Be brief: one to three sentences unless they ask for more. Use only the data given.
-                You cannot change a verdict or a published workout from here. To report how they feel there is
+                You cannot change a verdict from here. To report how they feel there is
                 /ressenti, to keep a fact /note, to redo the morning call /aujourdhui. If they report pain that
                 persists, or a warning sign, recommend a health professional, once and plainly.
                 Asked how to do a planned session (plannedNextDays), answer as a briefing: what it is for,
@@ -201,8 +201,13 @@ public final class Conversation {
                 %s
                 SEANCE <the request in the athlete's words, with the day>  to propose one workout
                 SEMAINE <the request, or nothing>  to propose a week
+                DEPLACER YYYY-MM-DD YYYY-MM-DD <sport or nothing>  to move a planned workout from the first day
+                to the second (sport only when two workouts share the day)
+                MODIFIER YYYY-MM-DD <sport or nothing> <the change, in the athlete's words>  to change a planned
+                workout: shorter, easier, another format; the program shows the new version before publishing
                 SEANCE and SEMAINE only open a draft the athlete then publishes or not: use them whenever the
-                athlete asks for a workout or a week, or accepts one you suggested.
+                athlete asks for a workout or a week, or accepts one you suggested. Use DEPLACER and MODIFIER
+                whenever they ask to move, shift, shorten, lighten or otherwise change a planned workout.
                 Otherwise, after your answer, add a line SUGGESTIONS: and three lines starting with "- ", each
                 a short message the athlete is likely to send next, in French, in their voice, at most 40
                 characters, that you or the program can answer (a question about their data, "Propose la

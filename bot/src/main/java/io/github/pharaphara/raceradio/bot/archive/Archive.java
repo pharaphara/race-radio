@@ -28,6 +28,9 @@ public class Archive {
 
     private static final Logger LOG = LoggerFactory.getLogger(Archive.class);
     private static final JsonMapper JSON = JsonMapper.builder().build();
+    /** Calendar entries as the API sent them: far more fields than the record keeps. */
+    private static final JsonMapper EVENTS = JsonMapper.builder()
+            .disable(tools.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES).build();
     /** Sports whose streams hold figures worth computing; the others never trigger a download. */
     static final Set<String> WITH_STREAM_FIGURES = Set.of("Ride", "VirtualRide", "GravelRide", "MountainBikeRide",
             "Run", "TrailRun", "VirtualRun", "Treadmill", "Swim", "OpenWaterSwim");
@@ -174,6 +177,20 @@ public class Archive {
                         + " « " + r.get("name") + " »" + (r.get("t") instanceof Number n && n.intValue() > 0 ? " " + n.intValue() / 60 + " min" : "")
                         + (String.valueOf(r.get("ext")).startsWith("race-radio-") ? " (race-radio)" : ""))
                 .toList();
+    }
+
+    /** The workouts planned on one day, as the calendar cache holds them, whoever wrote them. */
+    public List<io.github.pharaphara.raceradio.icu.model.CalendarEvent> workoutsOn(LocalDate day) {
+        return jdbc.queryForList("SELECT json FROM archive_event WHERE day = ? AND json_extract(json, '$.category') = 'WORKOUT' ORDER BY id",
+                        String.class, day.toString()).stream()
+                .map(j -> EVENTS.readValue(j, io.github.pharaphara.raceradio.icu.model.CalendarEvent.class))
+                .toList();
+    }
+
+    /** One planned workout from the calendar cache, by its id. */
+    public Optional<io.github.pharaphara.raceradio.icu.model.CalendarEvent> workoutEvent(long id) {
+        return jdbc.queryForList("SELECT json FROM archive_event WHERE id = ?", String.class, id).stream().findFirst()
+                .map(j -> EVENTS.readValue(j, io.github.pharaphara.raceradio.icu.model.CalendarEvent.class));
     }
 
     /**

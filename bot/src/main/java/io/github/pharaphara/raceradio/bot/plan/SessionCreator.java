@@ -81,7 +81,16 @@ public final class SessionCreator {
      *
      * @param answerJson  the draft as the model wrote it, to amend it without starting over
      */
-    public record Pending(boolean week, LocalDate start, List<Item> items, String why, String request, String answerJson) {
+    public record Pending(boolean week, LocalDate start, List<Item> items, String why, String request, String answerJson,
+                          Replacing replaces) {
+
+        public Pending(boolean week, LocalDate start, List<Item> items, String why, String request, String answerJson) {
+            this(week, start, items, why, request, answerJson, null);
+        }
+    }
+
+    /** The calendar entry a revised workout takes the place of, removed only once the new one is in. */
+    public record Replacing(long eventId, String name) {
     }
 
     /** What a request gave: workouts to show, or only a message (help, question, refusal). */
@@ -104,6 +113,7 @@ public final class SessionCreator {
     /** The draft the athlete pressed Modifier on: their next plain message is the change. */
     private volatile Long amending;
     private io.github.pharaphara.raceradio.bot.commands.QuickReplies replies = new io.github.pharaphara.raceradio.bot.commands.QuickReplies();
+    private CalendarEdits edits;
 
     /** The store behind the buttons that speak for the athlete. */
     public SessionCreator withReplies(io.github.pharaphara.raceradio.bot.commands.QuickReplies replies) {
@@ -137,6 +147,29 @@ public final class SessionCreator {
         show(prepareWeek(text));
     }
 
+    /** Moving and changing workouts already on the calendar. */
+    public synchronized CalendarEdits edits() {
+        if (edits == null) {
+            edits = new CalendarEdits(writer, archive, this, telegram, chatId, clock);
+        }
+        return edits;
+    }
+
+    /**
+     * Drafts a new version of a workout already on the calendar, from the athlete's change. It is
+     * shown like any draft, and on Publier it is published first and the old one removed after, so
+     * a failure leaves the old one in place.
+     */
+    public void revise(CalendarEvent current, String change) {
+        amending = null;
+        LocalDate day = current.start().toLocalDate();
+        String now = "« " + current.name() + " » (" + current.type() + "), as written on the calendar:\n"
+                + (current.description() == null ? "" : current.description());
+        Thresholds t = planner.thresholds();
+        show(draftWith(day, "modifier « " + current.name() + " » : " + change,
+                () -> revisePrompt(day, now, change, t, context(day, 3)), new Replacing(current.id(), current.name())));
+    }
+
     /** True while the athlete is expected to say what to change in a draft. */
     public boolean amending() {
         return amending != null;
@@ -157,7 +190,8 @@ public final class SessionCreator {
             return;
         }
         Prepared next = p.week() ? draftWeek(p.start(), p.request(), p.answerJson(), change)
-                : draftOne(p.start(), p.request(), p.answerJson(), change);
+                : draftWith(p.start(), p.request(), () -> prompt(p.start(), p.request(), planner.thresholds(),
+                        context(p.start(), 3), p.answerJson(), change), p.replaces());
         if (next.pending() != null) {
             pending.remove(id);
         }
@@ -236,9 +270,13 @@ public final class SessionCreator {
     }
 
     private Prepared draftOne(LocalDate day, String request, String previous, String change) {
+        return draftWith(day, request, () -> prompt(day, request, planner.thresholds(), context(day, 3), previous, change), null);
+    }
+
+    private Prepared draftWith(LocalDate day, String request, java.util.function.Supplier<String> promptText, Replacing replacing) {
         Thresholds t = planner.thresholds();
         try {
-            JsonNode root = ask(prompt(day, request, t, context(day, 3), previous, change));
+            JsonNode root = ask(promptText.get());
             if (root == null) {
                 return new Prepared(lastQuestion, null);
             }
@@ -246,8 +284,9 @@ public final class SessionCreator {
             Workout w = buildable(JSON.treeToValue(workout, Draft.class).build(t));
             String why = text(root, "why");
             String note = WorkoutText.note(text(root, "note"));
-            Pending p = new Pending(false, day, List.of(new Item(day, w, note)), why, request, root.toString());
-            return new Prepared(preview(day, w, t, why, note, alreadyPlanned(day)), p);
+            Pending p = new Pending(false, day, List.of(new Item(day, w, note)), why, request, root.toString(), replacing);
+            String beside = replacing == null ? alreadyPlanned(day) : "\nElle remplacera « " + replacing.name() + " » au calendrier.";
+            return new Prepared(preview(day, w, t, why, note, beside), p);
         } catch (CoachModel.BudgetExhausted e) {
             return new Prepared("Le budget du modèle est atteint ce mois-ci : je ne peux pas préparer de séance.", null);
         } catch (IllegalArgumentException e) {
@@ -444,14 +483,26 @@ public final class SessionCreator {
         String trouble = problems.isEmpty() ? "" : "\nProblèmes : " + String.join(" ; ", problems);
         if (!p.week()) {
             if (created.isEmpty()) {
-                telegram.send(chatId, "La publication a échoué." + trouble);
+                telegram.send(chatId, "La publication a échoué." + trouble
+                        + (p.replaces() == null ? "" : "\nL'ancienne « " + p.replaces().name() + " » reste au calendrier."));
                 return;
             }
             Item i = p.items().getFirst();
+            String replaced = "";
+            if (p.replaces() != null) {
+                try {
+                    writer.deleteOwnEvent(p.replaces().eventId());
+                    refreshCalendar();
+                    replaced = ", à la place de « " + p.replaces().name() + " »";
+                } catch (RuntimeException e) {
+                    LOG.warn("removing the replaced workout {} failed: {}", p.replaces().eventId(), e.getMessage());
+                    trouble += "\nJe n'ai pas pu retirer l'ancienne « " + p.replaces().name() + " » : retire-la dans Intervals.icu.";
+                }
+            }
             List<Map<String, String>> rows = new ArrayList<>(replies.rows(List.of("Comment exécuter ma séance du " + SHORT.format(i.day()) + " ?")));
             rows.add(Map.of("Retirer du calendrier", "del:" + created.getFirst()));
             telegram.sendWithButtonRows(chatId, "« " + i.workout().name() + " » publiée pour " + DAY.format(i.day())
-                    + ", avec sa note. Elle partira vers ta montre et MyWhoosh à la prochaine synchronisation." + trouble, rows);
+                    + replaced + ", avec sa note. Elle partira vers ta montre et MyWhoosh à la prochaine synchronisation." + trouble, rows);
             return;
         }
         long batch = ids.incrementAndGet();
@@ -707,6 +758,21 @@ public final class SessionCreator {
 
                 """.formatted(start, start.plusDays(WEEK - 1)) + rules(t);
         return withRequest(base, context, request, previous, change);
+    }
+
+    static String revisePrompt(LocalDate day, String current, String change, Thresholds t, String context) {
+        String base = """
+                Task: the athlete wants to change a workout already on their calendar for %s. Write its new
+                version. Apply the change they ask for and keep everything else: same sport and same intent
+                unless the change says otherwise. Answer with JSON and nothing else:
+                {"why": "one or two French sentences: what changed and why it still fits",
+                 "note": "the note, as described below",
+                 "workout": { a workout }}
+
+                """.formatted(day + " (" + DAY.format(day) + ")") + rules(t);
+        return base + "\n" + PromptFence.data("race-radio.context", context)
+                + "\n" + PromptFence.data("race-radio.current-workout", current)
+                + "\n" + PromptFence.data("change", change);
     }
 
     private static String withRequest(String base, String context, String request, String previous, String change) {
