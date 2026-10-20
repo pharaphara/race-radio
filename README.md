@@ -158,11 +158,16 @@ them: every row of their data carries their id, every query names it, and a test
 | `/inviter` · `/inviter gratuit` | an invitation, on your Claude subscription or on a free model |
 | `/athletes` | who is in, their model, their calls and cost this month |
 | `/modele Paul gratuit` · `/plafond Paul 5` | an athlete's model, and their monthly cap in dollars |
+| `/secours Paul oui` | when the free model fails, your subscription answers for them instead of the computed text |
 | `/pause Paul` · `/reprendre Paul` | silence an athlete, and bring them back |
 | `/retirer Paul` | remove them and every trace of them here, after confirmation |
 
 Running the coach for others on your own Claude subscription may fall outside its terms; a free
-model, or an API key, is the clean way.
+model, or an API key, is the clean way. For the free model, set `RACE_RADIO_FREE_MODEL_API_KEY`
+(OpenRouter by default, `RACE_RADIO_FREE_MODEL` to choose it): its reviews and answers come as JSON
+whose figures are references to the facts, filled in and checked by the program, and an athlete on
+it never falls back to your subscription unless you say so. At most two calls to any model run at
+once, whoever they are for.
 
 ## Modules
 

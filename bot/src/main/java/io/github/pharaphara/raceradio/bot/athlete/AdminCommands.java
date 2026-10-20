@@ -31,7 +31,7 @@ import java.util.stream.Stream;
 public final class AdminCommands {
 
     private static final Logger LOG = LoggerFactory.getLogger(AdminCommands.class);
-    static final Pattern COMMAND = Pattern.compile("(?i)^/(inviter|athletes|athlètes|modele|modèle|plafond|pause|reprendre|retirer)(?:@\\S+)?\\b\\s*(.*)$",
+    static final Pattern COMMAND = Pattern.compile("(?i)^/(inviter|athletes|athlètes|modele|modèle|plafond|secours|pause|reprendre|retirer)(?:@\\S+)?\\b\\s*(.*)$",
             Pattern.DOTALL);
 
     private final JdbcTemplate jdbc;
@@ -78,6 +78,7 @@ public final class AdminCommands {
             case "athletes", "athlètes" -> telegram.send(chat, list());
             case "modele", "modèle" -> route(chat, rest);
             case "plafond" -> budget(chat, rest);
+            case "secours" -> fallback(chat, rest);
             case "pause" -> status(chat, rest, "paused");
             case "reprendre" -> status(chat, rest, "active");
             case "retirer" -> askRemove(chat, rest);
@@ -108,7 +109,8 @@ public final class AdminCommands {
                     a.id().value(), month.atDay(1).atStartOfDay(zone).toInstant().toString());
             b.append("• ").append(a.name() == null ? "toi" : a.name()).append(a.administrator() ? " (admin)" : "")
                     .append(a.active() ? "" : " · en pause")
-                    .append(" · ").append(a.modelRoute().equals("free") ? "modèle gratuit" : "abonnement")
+                    .append(" · ").append(a.modelRoute().equals("free") ? "modèle gratuit" + (a.modelFallback() ? " (secours abonnement)" : "")
+                            : "abonnement")
                     .append(" · ").append(calls).append(" appels, ").append(cost.setScale(2, RoundingMode.HALF_UP)).append(" $ ce mois")
                     .append(a.monthlyBudget() == null ? "" : " sur " + a.monthlyBudget().stripTrailingZeros().toPlainString() + " $")
                     .append('\n');
@@ -155,6 +157,22 @@ public final class AdminCommands {
             jdbc.update("UPDATE athlete SET monthly_budget_usd = ? WHERE id = ?", Double.parseDouble(p[1].replace(',', '.')), a.id().value());
             registry.forget(a.id());
             telegram.send(chat, "Plafond de " + a.name() + " : " + p[1] + " $ par mois.");
+        });
+    }
+
+    /** Whether a failure of the free model may fall back to the administrator's subscription. */
+    private void fallback(long chat, String rest) {
+        String[] p = rest.split("\\s+", 2);
+        if (p.length < 2 || !(p[1].equalsIgnoreCase("oui") || p[1].equalsIgnoreCase("non"))) {
+            telegram.send(chat, "Exemple : /secours Paul oui (si le modèle gratuit échoue, ton abonnement répond), ou /secours Paul non");
+            return;
+        }
+        named(chat, p[0]).ifPresent(a -> {
+            boolean on = p[1].equalsIgnoreCase("oui");
+            jdbc.update("UPDATE athlete SET model_fallback = ? WHERE id = ?", on ? 1 : 0, a.id().value());
+            registry.forget(a.id());
+            telegram.send(chat, on ? "Si le modèle gratuit échoue pour " + a.name() + ", ton abonnement prendra le relais."
+                    : "Plus de relais par ton abonnement pour " + a.name() + " : ses textes restent calculés si le modèle gratuit échoue.");
         });
     }
 

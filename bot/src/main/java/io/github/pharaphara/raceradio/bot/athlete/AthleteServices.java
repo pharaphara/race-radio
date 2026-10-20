@@ -10,6 +10,8 @@ import io.github.pharaphara.raceradio.bot.commands.QuickReplies;
 import io.github.pharaphara.raceradio.bot.config.RaceRadioProperties;
 import io.github.pharaphara.raceradio.bot.llm.CoachModel;
 import io.github.pharaphara.raceradio.bot.llm.Journal;
+import io.github.pharaphara.raceradio.bot.llm.ModelReply;
+import io.github.pharaphara.raceradio.bot.llm.ModelRequest;
 import io.github.pharaphara.raceradio.bot.llm.ModelTransport;
 import io.github.pharaphara.raceradio.bot.llm.Pricing;
 import io.github.pharaphara.raceradio.bot.llm.SystemPrompt;
@@ -66,10 +68,14 @@ public final class AthleteServices {
      * What every athlete's coach is built with and that holds no athlete's data.
      *
      * @param intervalsApi  Intervals.icu's address; null for the real one, a local stand-in in tests
+     * @param transport     the configured model, the administrator's subscription by default
+     * @param free          the free model, checked by the program; null when none is configured
+     * @param freeModel     its name
      */
     public record Shared(JdbcTemplate jdbc, TelegramClient telegram, Clock clock, RaceRadioProperties props, SystemPrompt prompt,
                          ModelTransport transport, SegmentLibrary library, StravaHarvest harvest, boolean structured,
-                         String configuredWrites, String strapSince, java.net.URI intervalsApi) {
+                         String configuredWrites, String strapSince, java.net.URI intervalsApi,
+                         ModelTransport free, String freeModel) {
     }
 
     private final Athlete athlete;
@@ -117,8 +123,11 @@ public final class AthleteServices {
         this.journal = new Journal(dir.resolve("llm"));
         Ledger ledger = new Ledger(db);
         BigDecimal budget = athlete.monthlyBudget() != null ? athlete.monthlyBudget() : props.model().monthlyBudget();
-        this.model = new CoachModel(s.transport(), s.prompt(), ledger, journal, new Pricing(props.model().prices()),
-                props.model().name(), props.model().fallbacks(), budget, clock, props.zone());
+        Route route = route(athlete, s);
+        LOG.info("{}: model {}", athlete.label(), route.model());
+        this.model = new CoachModel(route.transport(), s.prompt(), ledger, journal, new Pricing(props.model().prices()),
+                route.model(), props.model().fallbacks(), budget, clock, props.zone());
+        boolean structured = route.structured() || s.structured();
 
         FeelStore feels = new FeelStore(db);
         DecisionLog decisions = new DecisionLog(db);
@@ -140,7 +149,7 @@ public final class AthleteServices {
         this.calibration = new Calibration(db, s.library(), streams);
 
         this.review = new SessionReview(intervals, writer, model, decisions, props.model().reviewEffort(), clock, streams::get)
-                .withArchive(archive).withSegments(segments).structured(s.structured()).withSports(plans::sports);
+                .withArchive(archive).withSegments(segments).structured(structured).withSports(plans::sports);
         this.watcher = new ActivityWatcher(intervals, reviewed, review, (activity, outcome) -> {
             if (chatId != 0) {
                 // Charts first, so the buttons stay under the text, at the bottom of the chat.
@@ -153,7 +162,7 @@ public final class AthleteServices {
         }, props.schedule().watchFrom(), props.schedule().watchUntil(), clock);
 
         this.conversation = new Conversation(model, morning, decisions, memory, clock, new ArchiveHistory(archive, trends))
-                .structured(s.structured()).withSports(plans::sports);
+                .structured(structured).withSports(plans::sports);
         // The swim threshold and the ramp in the configuration are the administrator's own.
         this.planner = new Planner(intervals, writer, plans,
                 athlete.administrator() && props.athlete() != null ? props.athlete().swimCssSeconds() : null,
@@ -167,6 +176,41 @@ public final class AthleteServices {
         this.router = new CommandRouter(s.telegram(), chatId, morning, feels, decisions, ledger, journal, model, clock, props.zone(),
                 allowed.isEmpty(), conversation, memory, boards, planCommands, adapter, merger, sessions, trends, segmentCommands)
                 .withReplies(replies).withSports(plans::sports);
+    }
+
+    /** The model an athlete's messages are written by, and whether its answers come as checked JSON. */
+    record Route(ModelTransport transport, String model, boolean structured) {
+    }
+
+    /**
+     * The subscription, or the free model with its answers checked by the program and filled from the
+     * facts, and behind it the subscription only if the administrator allowed it for this athlete. An
+     * athlete on the free model when none is configured gets the computed texts, never the
+     * subscription in silence.
+     */
+    static Route route(Athlete athlete, Shared s) {
+        if (!"free".equals(athlete.modelRoute())) {
+            return new Route(s.transport(), s.props().model().name(), false);
+        }
+        if (s.free() == null) {
+            LOG.warn("{}: on the free model, but none is configured (RACE_RADIO_FREE_MODEL_API_KEY): computed texts only",
+                    athlete.label());
+            return new Route(new ModelTransport() {
+                @Override
+                public ModelReply send(ModelRequest request, SystemPrompt system) {
+                    throw new IllegalStateException("no free model configured");
+                }
+
+                @Override
+                public String billing() {
+                    return "api";
+                }
+            }, s.freeModel(), true);
+        }
+        ModelTransport t = athlete.modelFallback()
+                ? new io.github.pharaphara.raceradio.bot.llm.FallbackTransport(s.free(), s.transport(), s.props().model().name())
+                : s.free();
+        return new Route(t, s.freeModel(), true);
     }
 
     /**

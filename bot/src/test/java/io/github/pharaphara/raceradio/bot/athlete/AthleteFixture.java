@@ -43,6 +43,9 @@ final class AthleteFixture implements AutoCloseable {
     /** Every request body Telegram received, in order, with its method: "sendMessage {...}". */
     final List<String> sent = new CopyOnWriteArrayList<>();
     final List<String> prompts = new CopyOnWriteArrayList<>();
+    /** Prompts that reached the free model, and what it answers. */
+    final List<String> freePrompts = new CopyOnWriteArrayList<>();
+    final Deque<String> freeAnswers = new ArrayDeque<>();
     /** Answers the model gives in turn; "Réponse." once they run out. */
     final Deque<String> answers = new ArrayDeque<>();
     final Clock clock = Clock.fixed(Instant.parse("2026-10-20T08:00:00Z"), ZoneId.of("Europe/Paris"));
@@ -103,9 +106,24 @@ final class AthleteFixture implements AutoCloseable {
                 return "subscription";
             }
         };
+        ModelTransport freeModel = new ModelTransport() {
+            @Override
+            public ModelReply send(ModelRequest request, SystemPrompt system) {
+                freePrompts.add(request.userContent());
+                if (freeAnswers.isEmpty()) {
+                    throw new IllegalStateException("free model down");
+                }
+                return new ModelReply(freeAnswers.removeFirst(), "free/model", "stop", false, Usage.NONE, 1, 0.0);
+            }
+
+            @Override
+            public String billing() {
+                return "api";
+            }
+        };
         telegram = new TelegramClient("t", HttpClient.newHttpClient(), URI.create(base + "/"));
         shared = new AthleteServices.Shared(alex.jdbc(), telegram, clock, props, SystemPrompt.of("rules"), model,
-                new SegmentLibrary(alex.jdbc()), null, false, "", "", URI.create(base + "/api/v1/"));
+                new SegmentLibrary(alex.jdbc()), null, false, "", "", URI.create(base + "/api/v1/"), freeModel, "free/model");
         Athletes athletes = new Athletes(alex.jdbc());
         registry = new AthleteRegistry(athletes, shared, a -> a.administrator() || a.intervalsKey() == null ? "k" : box.open(a.intervalsKey()));
         invitations = new Invitations(alex.jdbc(), clock);
