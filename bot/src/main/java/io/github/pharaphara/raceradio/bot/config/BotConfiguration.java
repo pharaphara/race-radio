@@ -88,13 +88,24 @@ public class BotConfiguration {
         return new io.github.pharaphara.raceradio.bot.llm.FallbackTransport(primary, transport(fallback), props.model().fallbackName());
     }
 
+    /** Claude keeps the rules on its own; another model's answers are checked by the program. */
+    private ModelTransport guarded(ModelTransport t) {
+        String mode = props.model().guard() == null ? "enforce" : props.model().guard().strip();
+        return switch (mode) {
+            case "off" -> t;
+            case "report" -> new io.github.pharaphara.raceradio.bot.llm.GuardedTransport(t, false);
+            case "enforce" -> new io.github.pharaphara.raceradio.bot.llm.GuardedTransport(t, true);
+            default -> throw new IllegalStateException("race-radio.model.guard must be enforce, report or off, not " + mode);
+        };
+    }
+
     private ModelTransport transport(String kind) {
         return switch (kind.strip()) {
             case "subscription" -> new ClaudeCodeTransport(props.model().claudeCommand(),
                     props.dataDir().resolve("claude"), Duration.ofMinutes(5));
             case "api" -> new AnthropicTransport(props.model().apiKey());
-            case "openai", "openrouter" -> new io.github.pharaphara.raceradio.bot.llm.OpenAiCompatibleTransport(
-                    props.model().baseUrl(), props.model().endpointKey(), Duration.ofMinutes(3));
+            case "openai", "openrouter" -> guarded(new io.github.pharaphara.raceradio.bot.llm.OpenAiCompatibleTransport(
+                    props.model().baseUrl(), props.model().endpointKey(), Duration.ofMinutes(3)));
             default -> throw new IllegalStateException("race-radio.model.transport must be subscription, api or openai, not " + kind);
         };
     }

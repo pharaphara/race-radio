@@ -71,6 +71,16 @@ public final class Conversation {
         return reply(athleteMessage).text();
     }
 
+    /** Whether the model answers as JSON with references to the context, for weaker models. */
+    private boolean structured;
+    /** The context of the last prompt, where an answer's references are looked up. */
+    private volatile tools.jackson.databind.JsonNode lastContext;
+
+    public Conversation structured(boolean on) {
+        this.structured = on;
+        return this;
+    }
+
     public Reply reply(String athleteMessage) {
         String prompt = prompt(athleteMessage);
         memory.add(clock.instant(), "athlete", athleteMessage);
@@ -80,7 +90,7 @@ public final class Conversation {
             ModelReply r = model.ask(Purpose.CHAT, "low", 2_000, prompt);
             String raw = r.refused() || r.text().isBlank()
                     ? "Je ne peux pas répondre à ça. Les commandes restent disponibles : /aide."
-                    : r.text();
+                    : structured ? fromJson(r.text()) : r.text();
             int cut = raw.toUpperCase(java.util.Locale.ROOT).lastIndexOf(SUGGESTIONS);
             text = (cut < 0 ? raw : raw.substring(0, cut)).strip();
             if (cut >= 0) {
@@ -110,6 +120,42 @@ public final class Conversation {
     }
 
     static final String SUGGESTIONS = "SUGGESTIONS:";
+
+    /**
+     * A structured answer turned back into the plain form the rest of this class reads: the
+     * delegation line alone, or the answer with its figures filled in, then the suggestions.
+     */
+    String fromJson(String answer) {
+        return fromJson(answer, lastContext == null ? JSON.createObjectNode() : lastContext);
+    }
+
+    public static String fromJson(String answer, tools.jackson.databind.JsonNode context) {
+        int from = answer.indexOf('{');
+        int to = answer.lastIndexOf('}');
+        if (from < 0 || to < from) {
+            throw new IllegalArgumentException("the answer is not JSON");
+        }
+        tools.jackson.databind.JsonNode root = JSON.readTree(answer.substring(from, to + 1));
+        String delegate = root.path("delegate").isString() ? root.path("delegate").asString().strip() : "";
+        if (!delegate.isEmpty()) {
+            return delegate;
+        }
+        List<String> problems = new java.util.ArrayList<>();
+        String text = io.github.pharaphara.raceradio.bot.review.StructuredReview.fill(
+                root.path("reply").asString(""), context, problems,
+                io.github.pharaphara.raceradio.bot.llm.ReplyGuard.numbers(context.toString()));
+        if (text.isBlank()) {
+            problems.add("missing reply");
+        }
+        if (!problems.isEmpty()) {
+            throw new IllegalArgumentException(String.join("; ", problems));
+        }
+        StringBuilder b = new StringBuilder(text).append("\n").append(SUGGESTIONS);
+        for (tools.jackson.databind.JsonNode s : root.path("suggestions")) {
+            b.append("\n- ").append(s.asString(""));
+        }
+        return b.toString();
+    }
     private static final java.util.regex.Pattern CREATE = java.util.regex.Pattern.compile("^(SEANCE|SEMAINE)\\b\\s*(.*)$", java.util.regex.Pattern.DOTALL);
 
     /** A reply that asks the program to open a draft rather than to answer. */
@@ -169,10 +215,14 @@ public final class Conversation {
                 context.put("readinessToday", "unavailable: " + e.getMessage());
             }
         }
+        if (structured && context.get("readinessToday") instanceof Map<?, ?> m && m.get("evidence") instanceof String ev) {
+            context.put("readinessToday", Map.of("verdict", m.get("verdict"), "evidence", parsed(ev)));
+        }
         context.put("lastMornings", history.recentDays(RECENT_DAYS));
         context.put("lastSessions", history.recentSessions(RECENT_DAYS));
         decisions.latestOf("REVIEW").ifPresent(d -> context.put("latestSessionReview", Map.of("day", d.day(), "message",
-                d.message() == null ? "" : d.message(), "facts", d.evidenceJson().length() > 8_000 ? d.evidenceJson().substring(0, 8_000) : d.evidenceJson())));
+                d.message() == null ? "" : d.message(), "facts", structured ? parsed(d.evidenceJson())
+                        : d.evidenceJson().length() > 8_000 ? d.evidenceJson().substring(0, 8_000) : d.evidenceJson())));
         context.put("plannedNextDays", history.plannedDetail(3));
         List<Conversations.Note> notes = memory.activeNotes();
         context.put("athleteNotes", notes.stream().map(n -> n.at().substring(0, 10) + " " + n.text()).toList());
@@ -181,7 +231,10 @@ public final class Conversation {
         for (Conversations.Turn t : turns) {
             history.append(t.at(), 0, 16).append(' ').append(t.role()).append(": ").append(t.text()).append('\n');
         }
-        return """
+        if (structured) {
+            lastContext = JSON.valueToTree(context);
+        }
+        String text = """
                 Task: answer the athlete's message below, in French, for Telegram.
                 Be brief: one to three sentences unless they ask for more. Use only the data given.
                 You cannot change a verdict or a published workout from here. To report how they feel there is
@@ -215,5 +268,45 @@ public final class Conversation {
                 %s""".formatted(RECENT_DAYS, String.join("\n", this.history.metrics()),
                 PromptFence.data("race-radio.context", JSON.writeValueAsString(context)),
                 PromptFence.data("race-radio.conversation", history.toString()), athleteMessage);
+        return structured ? structuredForm(text) : text;
+    }
+
+    /** Facts kept as JSON text, read back so that references can reach inside them. */
+    private static Object parsed(String json) {
+        try {
+            return JSON.readTree(json);
+        } catch (RuntimeException e) {
+            return json;
+        }
+    }
+
+    static final String STRUCTURED_MARKER = "Answer with JSON only, in this shape";
+
+    /** The same task, answered as JSON: the delegation in its own field, every figure a reference. */
+    static String structuredForm(String prose) {
+        String out = prose
+                .replace("then reply with exactly one line and\nnothing else, and the program will answer",
+                        "then put exactly that one line in \"delegate\", and the program will answer")
+                .replace("""
+                Otherwise, after your answer, add a line SUGGESTIONS: and three lines starting with "- ", each
+                a short message the athlete is likely to send next, in French, in their voice, at most 40
+                characters, that you or the program can answer (a question about their data, "Propose la
+                séance de jeudi", "Compare à ma sortie du 4 octobre", "Comment exécuter ma séance de demain ?").
+                """, STRUCTURED_MARKER + """
+                , nothing before or after it:
+                {"reply": "your answer, or empty when you delegate",
+                 "suggestions": ["three short messages the athlete is likely to send next, in French, in their
+                                 voice, at most 40 characters each, that you or the program can answer"],
+                 "delegate": "the one program line (JOUR, ACTIVITE, COMPARE, TENDANCE, SEANCE, SEMAINE), or empty"}
+                In "reply", a figure held alone in a field of the context is a reference in braces, never typed:
+                {latestSessionReview.facts.power.load}, {readinessToday.score}; the program puts the value in,
+                so write the unit only when the value lacks it. A figure that sits inside a longer text of the
+                context may be copied exactly as written there. Never compute or estimate a figure. A reference
+                to a field that does not exist refuses the answer. Small counts and days (up to 31) may be typed.
+                """);
+        if (!out.contains(STRUCTURED_MARKER) || out.contains("SUGGESTIONS:")) {
+            throw new IllegalStateException("the conversation prompt changed: its structured form no longer applies");
+        }
+        return out;
     }
 }

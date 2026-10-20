@@ -57,6 +57,8 @@ race-radio:
     # Asked when the first model fails, is out of quota or declines; empty for none.
     fallback-transport: ${RACE_RADIO_MODEL_FALLBACK_TRANSPORT:}
     fallback-name: ${RACE_RADIO_MODEL_FALLBACK:claude-sonnet-5-5}
+    # openai transport only: enforce (refuse invented numbers, the fallback answers), report, off.
+    guard: ${RACE_RADIO_MODEL_GUARD:enforce}
     morning-effort: low
     review-effort: medium
     fallbacks: true

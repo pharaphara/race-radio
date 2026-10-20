@@ -105,7 +105,7 @@ public final class SessionReview {
         try {
             ModelReply reply = model.ask(Purpose.REVIEW, effort, 4_000, prompt(facts, a.name()));
             if (!reply.refused() && !reply.text().isBlank()) {
-                message = reply.text();
+                message = structured ? StructuredReview.render(JSON.writeValueAsString(facts), reply.text()) : reply.text();
                 worded = true;
             }
         } catch (CoachModel.BudgetExhausted e) {
@@ -401,7 +401,26 @@ public final class SessionReview {
                 || EffortSignal.SWIM.contains(planned) && EffortSignal.SWIM.contains(done);
     }
 
+    /** Whether the model fills the review as JSON with references to the facts, for weaker models. */
+    private boolean structured;
+
+    public SessionReview structured(boolean on) {
+        this.structured = on;
+        return this;
+    }
+
     String prompt(SessionFacts f, String activityName) {
+        if (!structured) {
+            return prose(f, activityName);
+        }
+        String prose = prose(f, activityName);
+        int rules = prose.indexOf("Rules:");
+        return "Task: write the review of the session below, in French, for Telegram.\n" + StructuredReview.shape()
+                + prose.substring(rules).replace("Use only the figures given, as written. Never compute or estimate one.",
+                "Never compute or estimate one: a figure the facts do not hold is left out.");
+    }
+
+    private String prose(SessionFacts f, String activityName) {
         return """
                 Task: write the review of the session below, in French, for Telegram, 150 to 250 words.
                 Shape, in this order:

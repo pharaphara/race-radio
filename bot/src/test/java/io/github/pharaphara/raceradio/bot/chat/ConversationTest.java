@@ -191,6 +191,34 @@ class ConversationTest {
     }
 
     @Test
+    void aStructuredAnswerIsFilledFromTheContextAndItsDelegationIsCarriedOut() {
+        Conversation c = conversation().structured(true);
+        String prompt = c.prompt("Ma VFC ?");
+        assertThat(prompt).contains(Conversation.STRUCTURED_MARKER).doesNotContain("SUGGESTIONS:");
+
+        modelReply = """
+                {"reply": "Ta VFC est à 30 ms, sous ta moyenne.", "suggestions": ["Regarde aussi mon sommeil", "Propose la séance de jeudi", "Compare à ma sortie du 4 octobre"], "delegate": ""}""";
+        Conversation.Reply r = c.reply("Ma VFC ?");
+        assertThat(r.text()).isEqualTo("Ta VFC est à 30 ms, sous ta moyenne.");
+        assertThat(r.suggestions()).hasSize(3);
+
+        modelReply = """
+                {"reply": "", "suggestions": [], "delegate": "SEANCE jeudi une VO2 à vélo"}""";
+        assertThat(c.reply("Propose la séance de jeudi").action()).isEqualTo(new Conversation.Action("SEANCE", "jeudi une VO2 à vélo"));
+    }
+
+    @Test
+    void aFigureTheContextDoesNotHoldIsRefused() {
+        tools.jackson.databind.JsonNode context = tools.jackson.databind.json.JsonMapper.builder().build()
+                .readTree("{\"lastMornings\": [\"2026-10-16 VFC 30 ms\"], \"power\": {\"load\": 98}}");
+        assertThat(Conversation.fromJson("{\"reply\": \"Charge {power.load}, VFC 30 ms.\", \"suggestions\": []}", context))
+                .startsWith("Charge **98**, VFC 30 ms.");
+        org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+                        Conversation.fromJson("{\"reply\": \"Ta charge monte de 45 %.\", \"suggestions\": []}", context))
+                .hasMessageContaining("figure typed by hand: 45");
+    }
+
+    @Test
     void askingForAWorkoutOpensADraftInsteadOfAnswering() {
         modelReply = "SEANCE jeudi une VO2 à vélo";
         Conversation.Reply r = conversation().reply("Propose la séance de jeudi");

@@ -98,6 +98,16 @@ class ClaudeCodeTransportTest {
     }
 
     @Test
+    void theCommandLinesOwnMessageIsNeverTakenForAnAnswer() {
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> ClaudeCodeTransport.parse("""
+                {"type":"result","subtype":"success","is_error":true,"result":"Fable 5.1 requires usage credits.","usage":{"output_tokens":0}}""", 5))
+                .hasMessageContaining("requires usage credits");
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> ClaudeCodeTransport.parse("""
+                {"type":"result","subtype":"success","is_error":false,"result":"Usage limit reached.","usage":{"output_tokens":0},"modelUsage":{}}""", 5))
+                .hasMessageContaining("without any model");
+    }
+
+    @Test
     void aFailingCommandWithoutOutputIsAnError() throws IOException {
         var t = new ClaudeCodeTransport(fakeClaude("", 1, 0).toString(), dir.resolve("work"), Duration.ofSeconds(20));
         assertThatThrownBy(() -> t.send(request("x"), SystemPrompt.of("rules"))).isInstanceOf(RuntimeException.class);
