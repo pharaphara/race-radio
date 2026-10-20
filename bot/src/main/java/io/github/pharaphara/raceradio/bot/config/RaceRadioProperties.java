@@ -43,7 +43,13 @@ public record RaceRadioProperties(
 
     /**
      * @param transport       {@code subscription}: through the Claude Code command line and a Claude
-     *                        subscription; {@code api}: through the API, billed per token
+     *                        subscription; {@code api}: through the Anthropic API, billed per token;
+     *                        {@code openai}: any service speaking the OpenAI chat format with a key,
+     *                        OpenRouter by default
+     * @param baseUrl         {@code openai} transport: the service's address, empty for OpenRouter
+     * @param endpointKey     {@code openai} transport: its API key, empty for a local model
+     * @param fallbackTransport  a second transport asked when the first fails or declines, or empty
+     * @param fallbackName    the model the second transport asks for
      * @param claudeCommand   path of the {@code claude} command, for the subscription transport
      * @param prices          dollars per million tokens, per answering model, for the API transport;
      *                        prices change, so they live here and not in code
@@ -56,7 +62,8 @@ public record RaceRadioProperties(
      */
     public record Model(String transport, String claudeCommand, String apiKey, String name,
                         String morningEffort, String reviewEffort, boolean fallbacks,
-                        BigDecimal monthlyBudget, Map<String, Prices> prices, int journalDays) {
+                        BigDecimal monthlyBudget, Map<String, Prices> prices, int journalDays,
+                        String baseUrl, String endpointKey, String fallbackTransport, String fallbackName) {
     }
 
     public record Prices(BigDecimal input, BigDecimal output, BigDecimal cacheWrite, BigDecimal cacheRead) {
