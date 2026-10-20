@@ -31,7 +31,36 @@ public final class SessionCharts {
     private SessionCharts() {
     }
 
+    /** The altitude over the effort's seconds, or null when indoors or too flat to show a shape. */
+    static double[] relief(Samples altitude, int n) {
+        if (altitude == null) {
+            return null;
+        }
+        double[] a = new double[n];
+        double lo = Double.POSITIVE_INFINITY;
+        double hi = Double.NEGATIVE_INFINITY;
+        for (int i = 0; i < n; i++) {
+            a[i] = i < altitude.length() ? altitude.at(i) : Double.NaN;
+            if (!Double.isNaN(a[i])) {
+                lo = Math.min(lo, a[i]);
+                hi = Math.max(hi, a[i]);
+            }
+        }
+        return hi - lo >= MIN_RELIEF_METRES ? a : null;
+    }
+
+    /** Below this rise from lowest to highest point, a profile would only draw GPS noise. */
+    static final double MIN_RELIEF_METRES = 15;
+
     public static List<byte[]> render(SessionFacts f, Samples effort, Samples heartRate) {
+        return render(f, effort, heartRate, null);
+    }
+
+    /**
+     * With the altitude, its profile is washed in behind every panel, as Strava does: no axis and
+     * no figure, only where the ground rises and falls against the same time scale.
+     */
+    public static List<byte[]> render(SessionFacts f, Samples effort, Samples heartRate, Samples altitude) {
         List<byte[]> images = new ArrayList<>();
         if (!f.enoughData() || effort == null) {
             return images;
@@ -59,7 +88,7 @@ public final class SessionCharts {
         String subtitle = (f.start() == null ? "" : f.start().format(DateTimeFormatter.ofPattern("d MMMM", Locale.FRANCE)) + " · ")
                 + (f.work().isEmpty() ? "pas de bloc de travail"
                 : ("DEVICE_LAPS".equals(f.structureSource()) ? "blocs repris des tours de ta montre" : "blocs détectés"));
-        String svg = Charts.panels(title(f), subtitle, x, s -> (int) (s / 60) + " min", 600, panels, bands, Theme.DARK);
+        String svg = Charts.panels(title(f), subtitle, x, s -> (int) (s / 60) + " min", 600, panels, bands, relief(altitude, n), Theme.DARK);
         images.add(Png.of(svg, Charts.WIDTH, 2));
 
         if (!f.secondsInZones().isEmpty()) {
