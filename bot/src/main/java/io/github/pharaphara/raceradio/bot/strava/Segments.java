@@ -99,14 +99,17 @@ public final class Segments {
     }
 
     String overview() {
-        StravaHarvest.Progress p = harvest.progress();
         StringBuilder b = new StringBuilder();
-        if (p.activities() > 0 && !p.done()) {
-            b.append("Récupération Strava en cours : ").append(p.detailed()).append(" activités sur ").append(p.activities())
-                    .append(", ").append(p.segmentsWithTrace()).append(" segments sur ").append(p.segments()).append(".\n\n");
+        // Only the administrator harvests Strava; the others are timed on their GPS from the start.
+        if (harvest != null) {
+            StravaHarvest.Progress p = harvest.progress();
+            if (p.activities() > 0 && !p.done()) {
+                b.append("Récupération Strava en cours : ").append(p.detailed()).append(" activités sur ").append(p.activities())
+                        .append(", ").append(p.segmentsWithTrace()).append(" segments sur ").append(p.segments()).append(".\n\n");
+            }
+            harvest.ended().ifPresent(d -> b.append("Strava ne donne plus tes passages depuis le ").append(DAY.format(d))
+                    .append(" : je les chronomètre moi-même sur ta trace GPS.\n\n"));
         }
-        harvest.ended().ifPresent(d -> b.append("Strava ne donne plus tes passages depuis le ").append(DAY.format(d))
-                .append(" : je les chronomètre moi-même sur ta trace GPS.\n\n"));
         List<Map<String, Object>> top = jdbc.queryForList("SELECT id, name FROM segment").stream()
                 .map(s -> {
                     List<Effort> e = efforts(((Number) s.get("id")).longValue());

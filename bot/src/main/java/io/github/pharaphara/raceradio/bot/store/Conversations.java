@@ -1,7 +1,6 @@
 package io.github.pharaphara.raceradio.bot.store;
 
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -12,7 +11,6 @@ import java.util.List;
  * to keep (an injury, a constraint); they stay until withdrawn. The conversation is the dated record
  * of what was said; only its last turns are given back to the model.
  */
-@Repository
 public class Conversations {
 
     public record Turn(String at, String role, String text) {

@@ -2,7 +2,6 @@ package io.github.pharaphara.raceradio.bot.store;
 
 import io.github.pharaphara.raceradio.core.plan.Objective;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.stereotype.Repository;
 
 import java.time.DayOfWeek;
 import java.time.Instant;
@@ -15,7 +14,6 @@ import java.util.Optional;
 import java.util.Set;
 
 /** Objectives and the settings the planner reads. */
-@Repository
 public class Plans {
 
     /**

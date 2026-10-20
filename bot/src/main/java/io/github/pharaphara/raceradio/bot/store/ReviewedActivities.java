@@ -1,12 +1,10 @@
 package io.github.pharaphara.raceradio.bot.store;
 
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
 
 /** Activities already reviewed, so a restart or an overlapping poll never reviews one twice. */
-@Repository
 public class ReviewedActivities {
 
     private final JdbcTemplate jdbc;
