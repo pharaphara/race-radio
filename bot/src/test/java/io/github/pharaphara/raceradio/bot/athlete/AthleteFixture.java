@@ -55,7 +55,8 @@ final class AthleteFixture implements AutoCloseable {
     final AthleteServices.Shared shared;
     final AthleteRegistry registry;
     final TelegramClient telegram;
-    final SecretBox box = SecretBox.of("MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=");
+    /** A master key made for the test run, never written anywhere. */
+    final SecretBox box = SecretBox.of(java.util.Base64.getEncoder().encodeToString(new java.security.SecureRandom().generateSeed(32)));
     final Invitations invitations;
     final AthleteDispatcher dispatcher;
 
