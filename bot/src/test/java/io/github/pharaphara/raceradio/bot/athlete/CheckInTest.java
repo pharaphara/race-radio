@@ -135,7 +135,7 @@ class CheckInTest {
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> f.box.open(tampered)).isInstanceOf(IllegalStateException.class);
         SecretBox other = SecretBox.of(java.util.Base64.getEncoder().encodeToString(new byte[32]));
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> other.open(a)).isInstanceOf(IllegalStateException.class);
-        org.assertj.core.api.Assertions.assertThatThrownBy(() -> SecretBox.of("dHJvcCBjb3VydA==")).hasMessageContaining("32 bytes");
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> SecretBox.of(java.util.Base64.getEncoder().encodeToString(new byte[10]))).hasMessageContaining("32 bytes");
         assertThat(Map.of()).isEmpty();
     }
 }
