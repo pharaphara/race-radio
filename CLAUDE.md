@@ -17,6 +17,12 @@ A self-hosted triathlon coach on Telegram, backed by Intervals.icu. Public repos
    calendar entries whose `external_id` starts with `race-radio-`.
 5. **Name the model.** Any figure that depends on a modelling choice (W′ balance, zones) carries the
    model's name, and figures from different models are never compared.
+6. **No athlete's data without its athlete.** Every table of an athlete's data starts with
+   `athlete_id` (cascading from `athlete`), every class that keeps such data is built with an
+   `AthleteDb`, and every query names `athlete_id`. `AthleteScopeTest` checks the schema, the tables a
+   reset copies, and every SQL statement in the code. Only `athlete`, `invitation`, `checkin` and the
+   `segment` library are shared. The schema is applied by `Database`, never by Spring, and a schema
+   change bumps `Database.VERSION` with an explicit move, never an `ALTER` in place.
 
 ## Facts established against the real API
 

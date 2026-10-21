@@ -10,17 +10,21 @@ import java.time.Instant;
 public class ReviewedActivities {
 
     private final JdbcTemplate jdbc;
+    /** Whose data this is: every query below names it. */
+    private final long athlete;
 
-    public ReviewedActivities(JdbcTemplate jdbc) {
-        this.jdbc = jdbc;
+    public ReviewedActivities(AthleteDb db) {
+        this.jdbc = db.jdbc();
+        this.athlete = db.id();
     }
 
     public boolean contains(String activityId) {
-        Integer n = jdbc.queryForObject("SELECT COUNT(*) FROM reviewed_activity WHERE activity_id = ?", Integer.class, activityId);
+        Integer n = jdbc.queryForObject("SELECT COUNT(*) FROM reviewed_activity WHERE athlete_id = ? AND activity_id = ?",
+                Integer.class, athlete, activityId);
         return n != null && n > 0;
     }
 
     public void add(String activityId, Instant at) {
-        jdbc.update("INSERT OR IGNORE INTO reviewed_activity (activity_id, at) VALUES (?, ?)", activityId, at.toString());
+        jdbc.update("INSERT OR IGNORE INTO reviewed_activity (athlete_id, activity_id, at) VALUES (?, ?, ?)", athlete, activityId, at.toString());
     }
 }

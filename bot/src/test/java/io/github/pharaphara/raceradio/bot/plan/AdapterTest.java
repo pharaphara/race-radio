@@ -1,5 +1,6 @@
 package io.github.pharaphara.raceradio.bot.plan;
 
+import io.github.pharaphara.raceradio.bot.store.AthleteDb;
 import com.sun.net.httpserver.HttpServer;
 import io.github.pharaphara.raceradio.bot.TestDb;
 import io.github.pharaphara.raceradio.bot.store.Plans;
@@ -80,7 +81,7 @@ class AdapterTest {
         server.start();
         IntervalsClient icu = new IntervalsClient(new IntervalsCredentials("i42", "k"), HttpClient.newHttpClient(),
                 URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/api/v1/"));
-        JdbcTemplate jdbc = TestDb.in(dir);
+        AthleteDb jdbc = TestDb.in(dir);
         plans = new Plans(jdbc);
         IntervalsWriter dry = new IntervalsWriter(icu, IntervalsWriter.Mode.DRY_RUN, journal::add);
         adapter = new Adapter(icu, dry, plans, new Planner(icu, dry, plans, null, 5, MORNING), jdbc, MORNING);

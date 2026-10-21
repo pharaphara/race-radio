@@ -8,6 +8,7 @@ import io.github.pharaphara.raceradio.core.workout.Workout;
 import io.github.pharaphara.raceradio.icu.IntervalsClient;
 import io.github.pharaphara.raceradio.icu.IntervalsWriter;
 import io.github.pharaphara.raceradio.icu.model.CalendarEvent;
+import io.github.pharaphara.raceradio.bot.store.AthleteDb;
 import org.springframework.jdbc.core.JdbcTemplate;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -39,14 +40,17 @@ public final class Adapter {
     private final Plans plans;
     private final Planner planner;
     private final JdbcTemplate jdbc;
+    /** Whose data this is: every query below names it. */
+    private final long athlete;
     private final Clock clock;
 
-    public Adapter(IntervalsClient intervals, IntervalsWriter writer, Plans plans, Planner planner, JdbcTemplate jdbc, Clock clock) {
+    public Adapter(IntervalsClient intervals, IntervalsWriter writer, Plans plans, Planner planner, AthleteDb db, Clock clock) {
         this.intervals = intervals;
         this.writer = writer;
         this.plans = plans;
         this.planner = planner;
-        this.jdbc = jdbc;
+        this.jdbc = db.jdbc();
+        this.athlete = db.id();
         this.clock = clock;
     }
 
@@ -81,8 +85,8 @@ public final class Adapter {
                 }
             }
             writer.deleteOwnEvent(e.id());
-            jdbc.update("INSERT INTO adaptation (at, day, original_json, replacement_id) VALUES (?, ?, ?, ?)",
-                    String.valueOf(batch), today.toString(), JSON.writeValueAsString(e), replacementId);
+            jdbc.update("INSERT INTO adaptation (athlete_id, at, day, original_json, replacement_id) VALUES (?, ?, ?, ?, ?)",
+                    athlete, String.valueOf(batch), today.toString(), JSON.writeValueAsString(e), replacementId);
             lines.add("« " + e.name() + " » " + replacement.map(w -> "remplacée par « " + w.name() + " »").orElse("retirée"));
         }
         if (lines.isEmpty()) {
@@ -94,7 +98,8 @@ public final class Adapter {
     /** Restores the originals of one adjustment. */
     public String undo(long batch) {
         List<java.util.Map<String, Object>> rows = jdbc.queryForList(
-                "SELECT id, original_json, replacement_id FROM adaptation WHERE at = ? AND undone = 0", String.valueOf(batch));
+                "SELECT id, original_json, replacement_id FROM adaptation WHERE athlete_id = ? AND at = ? AND undone = 0",
+                athlete, String.valueOf(batch));
         if (rows.isEmpty()) {
             return "Rien à annuler.";
         }
@@ -105,7 +110,7 @@ public final class Adapter {
                 writer.deleteOwnEvent(((Number) r.get("replacement_id")).longValue());
             }
             writer.publishText(original.start().toLocalDate(), original.type(), original.name(), original.description());
-            jdbc.update("UPDATE adaptation SET undone = 1 WHERE id = ?", r.get("id"));
+            jdbc.update("UPDATE adaptation SET undone = 1 WHERE athlete_id = ? AND id = ?", athlete, r.get("id"));
             restored.add("« " + original.name() + " »");
         }
         return "Annulé : " + String.join(", ", restored) + " remis au calendrier.";

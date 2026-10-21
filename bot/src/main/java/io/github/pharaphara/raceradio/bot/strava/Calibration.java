@@ -2,6 +2,7 @@ package io.github.pharaphara.raceradio.bot.strava;
 
 import io.github.pharaphara.raceradio.bot.archive.StreamCache;
 import io.github.pharaphara.raceradio.core.segments.SegmentMatcher;
+import io.github.pharaphara.raceradio.bot.store.AthleteDb;
 import org.springframework.jdbc.core.JdbcTemplate;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -58,11 +59,14 @@ public class Calibration {
     }
 
     private final JdbcTemplate jdbc;
+    /** Whose data this is: every query below names it. */
+    private final long athlete;
     private final SegmentLibrary library;
     private final StreamCache streams;
 
-    public Calibration(JdbcTemplate jdbc, SegmentLibrary library, StreamCache streams) {
-        this.jdbc = jdbc;
+    public Calibration(AthleteDb db, SegmentLibrary library, StreamCache streams) {
+        this.jdbc = db.jdbc();
+        this.athlete = db.id();
         this.library = library;
         this.streams = streams;
     }
@@ -70,11 +74,12 @@ public class Calibration {
     public Report run() {
         Map<Long, SegmentLibrary.Segment> byId = new java.util.HashMap<>();
         library.segments().forEach(s -> byId.put(s.id(), s));
-        List<Map<String, Object>> intervals = jdbc.queryForList("SELECT id, type, json_extract(json, '$.start_date_local') AS start FROM archive_activity");
+        List<Map<String, Object>> intervals = jdbc.queryForList("SELECT id, type, json_extract(json, '$.start_date_local') AS start "
+                + "FROM archive_activity WHERE athlete_id = ?", athlete);
         int efforts = 0;
         int found = 0;
         List<Pair> pairs = new ArrayList<>();
-        for (Map<String, Object> a : jdbc.queryForList("SELECT id, summary FROM strava_activity WHERE detail IS NOT NULL")) {
+        for (Map<String, Object> a : jdbc.queryForList("SELECT id, summary FROM strava_activity WHERE athlete_id = ? AND detail IS NOT NULL", athlete)) {
             JsonNode summary = JSON.readTree((String) a.get("summary"));
             LocalDateTime start = time(summary.path("start_date_local").asString());
             Optional<String> icu = linked(intervals, start);
@@ -82,7 +87,7 @@ public class Calibration {
                 continue;
             }
             List<Map<String, Object>> list = jdbc.queryForList("SELECT segment_id, elapsed_seconds, json FROM strava_effort "
-                    + "WHERE activity_id = ? AND elapsed_seconds >= ?", a.get("id"), MIN_SECONDS);
+                    + "WHERE athlete_id = ? AND activity_id = ? AND elapsed_seconds >= ?", athlete, a.get("id"), MIN_SECONDS);
             if (list.isEmpty()) {
                 continue;
             }

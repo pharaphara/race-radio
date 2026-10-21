@@ -53,7 +53,7 @@ public final class MetricCatalog {
     }
 
     private static String c(String key) {
-        return "(SELECT value FROM computed_metric c WHERE c.activity_id = a.id AND c.metric = '" + key + "')";
+        return "(SELECT value FROM computed_metric c WHERE c.athlete_id = a.athlete_id AND c.activity_id = a.id AND c.metric = '" + key + "')";
     }
 
     private static String w(String field) {

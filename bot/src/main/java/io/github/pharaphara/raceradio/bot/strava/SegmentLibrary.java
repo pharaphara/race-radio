@@ -57,7 +57,7 @@ public class SegmentLibrary {
 
     private List<Segment> load() {
         List<Segment> out = new ArrayList<>();
-        for (Map<String, Object> r : jdbc.queryForList("SELECT id, name, detail FROM strava_segment WHERE detail IS NOT NULL")) {
+        for (Map<String, Object> r : jdbc.queryForList("SELECT id, name, detail FROM segment WHERE detail IS NOT NULL")) {
             JsonNode d = JSON.readTree((String) r.get("detail"));
             List<Point> trace = d.has("points") ? points(d.path("points")) : Geo.decode(d.path("map").path("polyline").asString(""));
             double metres = d.path("distance").asDouble(0);

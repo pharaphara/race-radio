@@ -1,5 +1,6 @@
 package io.github.pharaphara.raceradio.bot.plan;
 
+import io.github.pharaphara.raceradio.bot.store.AthleteDb;
 import io.github.pharaphara.raceradio.bot.TestDb;
 import io.github.pharaphara.raceradio.bot.store.Plans;
 import io.github.pharaphara.raceradio.icu.IntervalsClient;
@@ -33,7 +34,7 @@ class PlanCommandsTest {
     Path dir;
 
     private Plans plans;
-    private org.springframework.jdbc.core.JdbcTemplate jdbc;
+    private AthleteDb jdbc;
     private Planner planner;
     private PlanCommands commands;
     private final List<String> writes = new ArrayList<>();
@@ -101,9 +102,9 @@ class PlanCommandsTest {
     void storedModesFromBeforeTheOnDemandChangeAreReadSafely() {
         commands.mode("/mode demande");
         assertThat(plans.mode()).isEqualTo(Plans.Mode.ON_DEMAND);
-        jdbc.update("UPDATE setting SET value = 'PLAN' WHERE key = 'mode'");
+        jdbc.jdbc().update("UPDATE setting SET value = 'PLAN' WHERE athlete_id = ? AND key = 'mode'", jdbc.id());
         assertThat(plans.mode()).isEqualTo(Plans.Mode.ON_DEMAND);
-        jdbc.update("UPDATE setting SET value = 'OFF' WHERE key = 'mode'");
+        jdbc.jdbc().update("UPDATE setting SET value = 'OFF' WHERE athlete_id = ? AND key = 'mode'", jdbc.id());
         assertThat(plans.mode()).isEqualTo(Plans.Mode.ANALYSE);
     }
 

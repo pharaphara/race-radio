@@ -1,5 +1,6 @@
 package io.github.pharaphara.raceradio.bot.morning;
 
+import io.github.pharaphara.raceradio.bot.store.AthleteDb;
 import io.github.pharaphara.raceradio.bot.TestDb;
 import io.github.pharaphara.raceradio.bot.config.RaceRadioProperties;
 import io.github.pharaphara.raceradio.bot.llm.CoachModel;
@@ -48,7 +49,7 @@ class MorningCheckTest {
     @TempDir
     Path dir;
 
-    private JdbcTemplate jdbc;
+    private AthleteDb jdbc;
     private final List<String> writes = new ArrayList<>();
     private ModelReply nextReply;
 

@@ -4,6 +4,7 @@ import io.github.pharaphara.raceradio.core.metrics.StreamMetrics;
 import io.github.pharaphara.raceradio.icu.IntervalsClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import io.github.pharaphara.raceradio.bot.store.AthleteDb;
 import org.springframework.jdbc.core.JdbcTemplate;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -38,12 +39,15 @@ public class Archive {
     static final int HISTORY_DAYS = 400;
 
     private final JdbcTemplate jdbc;
+    /** Whose data this is: every query below names it. */
+    private final long athlete;
     private final IntervalsClient intervals;
     private final StreamCache streams;
     private final Clock clock;
 
-    public Archive(JdbcTemplate jdbc, IntervalsClient intervals, StreamCache streams, Clock clock) {
-        this.jdbc = jdbc;
+    public Archive(AthleteDb db, IntervalsClient intervals, StreamCache streams, Clock clock) {
+        this.jdbc = db.jdbc();
+        this.athlete = db.id();
         this.intervals = intervals;
         this.streams = streams;
         this.clock = clock;
@@ -59,19 +63,20 @@ public class Archive {
             if (id.isBlank() || start.length() < 10) {
                 continue;
             }
-            int n = jdbc.update("UPDATE archive_activity SET json = ?, type = ?, day = ?, fetched_at = ? WHERE id = ?",
-                    a.toString(), a.path("type").asString(), start.substring(0, 10), now, id);
+            int n = jdbc.update("UPDATE archive_activity SET json = ?, type = ?, day = ?, fetched_at = ? WHERE athlete_id = ? AND id = ?",
+                    a.toString(), a.path("type").asString(), start.substring(0, 10), now, athlete, id);
             if (n == 0) {
-                jdbc.update("INSERT INTO archive_activity (id, day, type, json, fetched_at) VALUES (?, ?, ?, ?, ?)",
-                        id, start.substring(0, 10), a.path("type").asString(), a.toString(), now);
+                jdbc.update("INSERT INTO archive_activity (athlete_id, id, day, type, json, fetched_at) VALUES (?, ?, ?, ?, ?, ?)",
+                        athlete, id, start.substring(0, 10), a.path("type").asString(), a.toString(), now);
                 added++;
             }
         }
         for (JsonNode w : intervals.wellnessRaw(from, to)) {
             String day = w.path("id").asString();
             if (day.length() == 10) {
-                jdbc.update("INSERT INTO archive_wellness (day, json, fetched_at) VALUES (?, ?, ?) "
-                        + "ON CONFLICT(day) DO UPDATE SET json = excluded.json, fetched_at = excluded.fetched_at", day, w.toString(), now);
+                jdbc.update("INSERT INTO archive_wellness (athlete_id, day, json, fetched_at) VALUES (?, ?, ?, ?) "
+                        + "ON CONFLICT(athlete_id, day) DO UPDATE SET json = excluded.json, fetched_at = excluded.fetched_at",
+                        athlete, day, w.toString(), now);
             }
         }
         return added;
@@ -85,8 +90,8 @@ public class Archive {
      */
     public int computePending(int max, Duration pause) {
         List<Map<String, Object>> rows = jdbc.queryForList(
-                "SELECT id, type, json FROM archive_activity WHERE computed_version < ? ORDER BY day DESC LIMIT ?",
-                StreamMetrics.VERSION, max);
+                "SELECT id, type, json FROM archive_activity WHERE athlete_id = ? AND computed_version < ? ORDER BY day DESC LIMIT ?",
+                athlete, StreamMetrics.VERSION, max);
         int done = 0;
         for (Map<String, Object> r : rows) {
             String id = (String) r.get("id");
@@ -99,13 +104,14 @@ public class Archive {
                     Map<String, Double> figures = StreamMetrics.compute(type, s::get,
                             a.path("icu_ftp").isNumber() ? a.path("icu_ftp").asInt() : null,
                             a.path("threshold_pace").isNumber() ? a.path("threshold_pace").asDouble() : null);
-                    jdbc.update("DELETE FROM computed_metric WHERE activity_id = ?", id);
-                    figures.forEach((k, v) -> jdbc.update("INSERT INTO computed_metric (activity_id, metric, value) VALUES (?, ?, ?)", id, k, v));
+                    jdbc.update("DELETE FROM computed_metric WHERE athlete_id = ? AND activity_id = ?", athlete, id);
+                    figures.forEach((k, v) -> jdbc.update("INSERT INTO computed_metric (athlete_id, activity_id, metric, value) VALUES (?, ?, ?, ?)",
+                            athlete, id, k, v));
                     if (download && !pause.isZero()) {
                         Thread.sleep(pause);
                     }
                 }
-                jdbc.update("UPDATE archive_activity SET computed_version = ? WHERE id = ?", StreamMetrics.VERSION, id);
+                jdbc.update("UPDATE archive_activity SET computed_version = ? WHERE athlete_id = ? AND id = ?", StreamMetrics.VERSION, athlete, id);
                 done++;
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
@@ -153,12 +159,12 @@ public class Archive {
         LocalDate to = today.plusDays(EVENTS_AHEAD);
         List<JsonNode> events = intervals.eventsRaw(today, to);
         String now = clock.instant().toString();
-        jdbc.update("DELETE FROM archive_event WHERE day >= ?", today.toString());
+        jdbc.update("DELETE FROM archive_event WHERE athlete_id = ? AND day >= ?", athlete, today.toString());
         for (JsonNode e : events) {
             String start = e.path("start_date_local").asString();
             if (e.path("id").isNumber() && start.length() >= 10) {
-                jdbc.update("INSERT OR REPLACE INTO archive_event (id, day, json, fetched_at) VALUES (?, ?, ?, ?)",
-                        e.path("id").asLong(), start.substring(0, 10), e.toString(), now);
+                jdbc.update("INSERT OR REPLACE INTO archive_event (athlete_id, id, day, json, fetched_at) VALUES (?, ?, ?, ?, ?)",
+                        athlete, e.path("id").asLong(), start.substring(0, 10), e.toString(), now);
             }
         }
     }
@@ -170,8 +176,8 @@ public class Archive {
     public List<String> planned(LocalDate from, int days) {
         return jdbc.queryForList("SELECT day, json_extract(json, '$.category') AS cat, json_extract(json, '$.type') AS type, "
                         + "json_extract(json, '$.name') AS name, json_extract(json, '$.moving_time') AS t, "
-                        + "json_extract(json, '$.external_id') AS ext FROM archive_event WHERE day >= ? AND day < ? ORDER BY day",
-                from.toString(), from.plusDays(days).toString()).stream()
+                        + "json_extract(json, '$.external_id') AS ext FROM archive_event WHERE athlete_id = ? AND day >= ? AND day < ? ORDER BY day",
+                athlete, from.toString(), from.plusDays(days).toString()).stream()
                 .filter(r -> !"NOTE".equals(r.get("cat")) || !String.valueOf(r.get("ext")).startsWith("race-radio-"))
                 .map(r -> r.get("day") + " " + r.get("cat") + (r.get("type") == null ? "" : " " + r.get("type"))
                         + " « " + r.get("name") + " »" + (r.get("t") instanceof Number n && n.intValue() > 0 ? " " + n.intValue() / 60 + " min" : "")
@@ -181,15 +187,16 @@ public class Archive {
 
     /** The workouts planned on one day, as the calendar cache holds them, whoever wrote them. */
     public List<io.github.pharaphara.raceradio.icu.model.CalendarEvent> workoutsOn(LocalDate day) {
-        return jdbc.queryForList("SELECT json FROM archive_event WHERE day = ? AND json_extract(json, '$.category') = 'WORKOUT' ORDER BY id",
-                        String.class, day.toString()).stream()
+        return jdbc.queryForList("SELECT json FROM archive_event WHERE athlete_id = ? AND day = ? "
+                                + "AND json_extract(json, '$.category') = 'WORKOUT' ORDER BY id",
+                        String.class, athlete, day.toString()).stream()
                 .map(j -> EVENTS.readValue(j, io.github.pharaphara.raceradio.icu.model.CalendarEvent.class))
                 .toList();
     }
 
     /** One planned workout from the calendar cache, by its id. */
     public Optional<io.github.pharaphara.raceradio.icu.model.CalendarEvent> workoutEvent(long id) {
-        return jdbc.queryForList("SELECT json FROM archive_event WHERE id = ?", String.class, id).stream().findFirst()
+        return jdbc.queryForList("SELECT json FROM archive_event WHERE athlete_id = ? AND id = ?", String.class, athlete, id).stream().findFirst()
                 .map(j -> EVENTS.readValue(j, io.github.pharaphara.raceradio.icu.model.CalendarEvent.class));
     }
 
@@ -205,7 +212,8 @@ public class Archive {
     public Optional<String> morning(LocalDate today) {
         List<Map<String, Object>> rows = jdbc.queryForList("SELECT day, json_extract(json, '$.hrv') AS hrv, "
                 + "json_extract(json, '$.restingHR') AS rhr, json_extract(json, '$.sleepSecs') AS sleep "
-                + "FROM archive_wellness WHERE day BETWEEN ? AND ? ORDER BY day", today.minusDays(7).toString(), today.toString());
+                + "FROM archive_wellness WHERE athlete_id = ? AND day BETWEEN ? AND ? ORDER BY day",
+                athlete, today.minusDays(7).toString(), today.toString());
         Map<String, Object> now = rows.stream().filter(r -> today.toString().equals(r.get("day"))).findFirst().orElse(null);
         if (now == null) {
             return Optional.empty();
@@ -235,8 +243,8 @@ public class Archive {
     /** An activity changed upstream (merged, or deleted by a merge): its local copies are dropped and redone at the next sync. */
     public void invalidate(String activityId) {
         streams.evict(activityId);
-        jdbc.update("DELETE FROM computed_metric WHERE activity_id = ?", activityId);
-        jdbc.update("DELETE FROM archive_activity WHERE id = ?", activityId);
+        jdbc.update("DELETE FROM computed_metric WHERE athlete_id = ? AND activity_id = ?", athlete, activityId);
+        jdbc.update("DELETE FROM archive_activity WHERE athlete_id = ? AND id = ?", athlete, activityId);
     }
 
     /** The last days as one line per session, from the archive only: what a prescription is calibrated on. */
@@ -245,7 +253,7 @@ public class Archive {
         return jdbc.queryForList("SELECT day, type, json_extract(json, '$.name') AS name, json_extract(json, '$.moving_time') AS t, "
                         + "json_extract(json, '$.icu_training_load') AS load, json_extract(json, '$.icu_intensity') AS intensity, "
                         + "json_extract(json, '$.icu_rpe') AS rpe "
-                        + "FROM archive_activity WHERE day >= ? ORDER BY day", from.toString()).stream()
+                        + "FROM archive_activity WHERE athlete_id = ? AND day >= ? ORDER BY day", athlete, from.toString()).stream()
                 .map(r -> r.get("day") + " " + r.get("type") + " « " + r.get("name") + " » "
                         + (r.get("t") instanceof Number n ? n.intValue() / 60 + " min" : "")
                         + (r.get("load") instanceof Number l ? ", charge " + l.intValue() : "")
@@ -255,12 +263,12 @@ public class Archive {
     }
 
     public int activities() {
-        Integer n = jdbc.queryForObject("SELECT COUNT(*) FROM archive_activity", Integer.class);
+        Integer n = jdbc.queryForObject("SELECT COUNT(*) FROM archive_activity WHERE athlete_id = ?", Integer.class, athlete);
         return n == null ? 0 : n;
     }
 
     public Optional<LocalDate> lastSync() {
-        String at = jdbc.queryForObject("SELECT MAX(fetched_at) FROM archive_activity", String.class);
+        String at = jdbc.queryForObject("SELECT MAX(fetched_at) FROM archive_activity WHERE athlete_id = ?", String.class, athlete);
         return at == null ? Optional.empty() : Optional.of(LocalDate.ofInstant(java.time.Instant.parse(at), clock.getZone()));
     }
 
@@ -270,5 +278,10 @@ public class Archive {
 
     JdbcTemplate jdbc() {
         return jdbc;
+    }
+
+    /** Whose archive this is, for the queries of this package that read it directly. */
+    long athlete() {
+        return athlete;
     }
 }
