@@ -76,6 +76,15 @@ public class Plans {
         set("mode", m.name());
     }
 
+    /** What the athlete owns for strength work, in their own words; empty for bodyweight only. */
+    public String equipment() {
+        return get("equipment").orElse("");
+    }
+
+    public void equipment(String words) {
+        set("equipment", words);
+    }
+
     /** Sports in season; all three by default. */
     public Set<String> sports() {
         return get("sports").map(v -> (Set<String>) new LinkedHashSet<>(List.of(v.split(",")))).orElse(new LinkedHashSet<>(List.of("Swim", "Ride", "Run")));
