@@ -166,6 +166,7 @@ public class BotConfiguration {
             TelegramClient telegram, Clock clock, ModelTransport transport,
             io.github.pharaphara.raceradio.bot.strava.SegmentLibrary library,
             io.github.pharaphara.raceradio.bot.strava.StravaHarvest harvest,
+            java.util.Optional<io.github.pharaphara.raceradio.bot.athlete.SecretBox> box,
             @org.springframework.beans.factory.annotation.Value("${race-radio.writes:}") String writes,
             @org.springframework.beans.factory.annotation.Value("${race-radio.hr-strap-since:}") String strapSince) {
         var shared = new io.github.pharaphara.raceradio.bot.athlete.AthleteServices.Shared(jdbc, telegram, clock, props,
@@ -174,14 +175,53 @@ public class BotConfiguration {
             if (a.administrator()) {
                 return props.intervals().apiKey();
             }
-            throw new IllegalStateException(a.label() + ": invited athletes' keys come with invitations");
+            if (box.isEmpty()) {
+                throw new IllegalStateException(a.label() + ": RACE_RADIO_SECRET_KEY is needed to open invited athletes' keys");
+            }
+            return box.get().open(a.intervalsKey());
         });
+    }
+
+    /**
+     * The master key that seals invited athletes' keys. Without one the bean is absent (null), the
+     * {@code Optional} injection points see it empty, and no invitation is possible.
+     */
+    @Bean
+    io.github.pharaphara.raceradio.bot.athlete.SecretBox box(
+            @org.springframework.beans.factory.annotation.Value("${race-radio.secret-key:}") String key) {
+        return key.isBlank() ? null : io.github.pharaphara.raceradio.bot.athlete.SecretBox.of(key);
+    }
+
+    @Bean
+    io.github.pharaphara.raceradio.bot.athlete.Invitations invitations(org.springframework.jdbc.core.JdbcTemplate jdbc, Clock clock) {
+        return new io.github.pharaphara.raceradio.bot.athlete.Invitations(jdbc, clock);
     }
 
     @Bean
     io.github.pharaphara.raceradio.bot.athlete.AthleteDispatcher athleteDispatcher(
-            io.github.pharaphara.raceradio.bot.athlete.AthleteRegistry registry, TelegramClient telegram, Clock clock) {
-        return new io.github.pharaphara.raceradio.bot.athlete.AthleteDispatcher(registry, telegram, clock);
+            io.github.pharaphara.raceradio.bot.athlete.AthleteRegistry registry, io.github.pharaphara.raceradio.bot.athlete.Athletes athletes,
+            io.github.pharaphara.raceradio.bot.athlete.Invitations invitations,
+            java.util.Optional<io.github.pharaphara.raceradio.bot.athlete.SecretBox> box,
+            org.springframework.jdbc.core.JdbcTemplate jdbc, TelegramClient telegram, Clock clock) {
+        var checkIn = new io.github.pharaphara.raceradio.bot.athlete.CheckIn(jdbc, invitations, box.orElse(null), telegram,
+                io.github.pharaphara.raceradio.icu.IntervalsClient::new, id -> welcome(registry, athletes, telegram, id), clock);
+        var admin = new io.github.pharaphara.raceradio.bot.athlete.AdminCommands(jdbc, athletes, invitations, registry, telegram,
+                props.dataDir(), props.zone(), clock, box.isPresent());
+        return new io.github.pharaphara.raceradio.bot.athlete.AthleteDispatcher(registry, checkIn, admin, telegram, clock);
+    }
+
+    /** A newcomer is in: the administrator hears of it, and their archive fills in the background. */
+    private static void welcome(io.github.pharaphara.raceradio.bot.athlete.AthleteRegistry registry,
+                                io.github.pharaphara.raceradio.bot.athlete.Athletes athletes, TelegramClient telegram,
+                                io.github.pharaphara.raceradio.bot.athlete.AthleteId id) {
+        athletes.byId(id).ifPresent(a -> {
+            Long adminChat = athletes.administrator().chatId();
+            if (adminChat != null) {
+                telegram.send(adminChat, a.name() + " vient d'entrer sur le coach (" + (a.modelRoute().equals("free") ? "modèle gratuit" : "abonnement")
+                        + "). /athletes pour la liste.");
+            }
+            Thread.ofVirtual().name("welcome-" + id.value()).start(() -> registry.jobs(registry.services(a)).backfill());
+        });
     }
 
     /**

@@ -49,8 +49,15 @@ public class TelegramClient {
      * @param photoFileId the largest size of a photo sent, or null
      * @param caption     the text sent with a photo, or null
      */
+    /** @param messageId  the message's own id in its chat, to delete it; 0 when unknown */
     public record Update(long updateId, long chatId, String text, String callbackId, String callbackData,
-                         String photoFileId, String caption) {
+                         String photoFileId, String caption, long messageId) {
+
+        public Update(long updateId, long chatId, String text, String callbackId, String callbackData,
+                      String photoFileId, String caption) {
+            this(updateId, chatId, text, callbackId, callbackData, photoFileId, caption, 0);
+        }
+
         public boolean isCallback() {
             return callbackId != null;
         }
@@ -76,7 +83,7 @@ public class TelegramClient {
                     photo = sizes.get(sizes.size() - 1).path("file_id").asString(null);
                 }
                 out.add(new Update(id, msg.path("chat").path("id").asLong(), msg.path("text").asString(null), null, null,
-                        photo, msg.path("caption").asString(null)));
+                        photo, msg.path("caption").asString(null), msg.path("message_id").asLong(0)));
             } else if (cb.isObject()) {
                 out.add(new Update(id, cb.path("message").path("chat").path("id").asLong(), null,
                         cb.path("id").asString(null), cb.path("data").asString(null), null, null));
@@ -236,6 +243,20 @@ public class TelegramClient {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Telegram file download interrupted");
         }
+    }
+
+    /** The bot's username, for links that open it with a start parameter; empty if Telegram does not say. */
+    public java.util.Optional<String> username() {
+        try {
+            return java.util.Optional.ofNullable(call("getMe", Map.of(), Duration.ofSeconds(10)).path("result").path("username").asString(null));
+        } catch (RuntimeException e) {
+            return java.util.Optional.empty();
+        }
+    }
+
+    /** Removes a message from the chat, such as one that held a key. */
+    public void deleteMessage(long chatId, long messageId) {
+        call("deleteMessage", Map.of("chat_id", chatId, "message_id", messageId), Duration.ofSeconds(10));
     }
 
     public void acknowledge(String callbackId, String note) {

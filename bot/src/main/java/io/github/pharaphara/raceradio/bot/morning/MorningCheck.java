@@ -178,8 +178,23 @@ public final class MorningCheck {
         return new Outcome(r, message, worded);
     }
 
+
+    /** The athlete's sports: recommendations stay within them unless the athlete brings up another. */
+    private java.util.function.Supplier<java.util.Set<String>> sports = java.util.Set::of;
+
+    public MorningCheck withSports(java.util.function.Supplier<java.util.Set<String>> sports) {
+        this.sports = sports;
+        return this;
+    }
+
+    private String sportsRule() {
+        java.util.Set<String> s = sports.get();
+        return s.isEmpty() ? "" : "The athlete practises " + io.github.pharaphara.raceradio.bot.plan.Sports.french(s)
+                + ": recommend sessions in these sports only, unless the athlete brings up another.\n";
+    }
+
     String prompt(Readiness r) {
-        return """
+        return sportsRule() + """
                 Task: write this morning's message to the athlete, in French, for Telegram.
                 The verdict is decided; do not change it. Start with exactly this line:
                 %s

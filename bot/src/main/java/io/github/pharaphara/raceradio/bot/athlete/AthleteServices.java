@@ -130,7 +130,8 @@ public final class AthleteServices {
         this.archive = new Archive(db, intervals, streams, clock);
         this.trends = new Trends(archive, s.telegram(), chatId, clock)
                 .withStrapSince(athlete.administrator() && !blank(s.strapSince()) ? LocalDate.parse(s.strapSince()) : null);
-        this.morning = new MorningCheck(intervals, writer, model, feels, decisions, props.temperament(), props.model().morningEffort(), clock);
+        this.morning = new MorningCheck(intervals, writer, model, feels, decisions, props.temperament(), props.model().morningEffort(), clock)
+                .withSports(plans::sports);
         this.replies = new QuickReplies();
 
         this.segments = new LocalSegments(db, s.library(), streams, clock);
@@ -139,7 +140,7 @@ public final class AthleteServices {
         this.calibration = new Calibration(db, s.library(), streams);
 
         this.review = new SessionReview(intervals, writer, model, decisions, props.model().reviewEffort(), clock, streams::get)
-                .withArchive(archive).withSegments(segments).structured(s.structured());
+                .withArchive(archive).withSegments(segments).structured(s.structured()).withSports(plans::sports);
         this.watcher = new ActivityWatcher(intervals, reviewed, review, (activity, outcome) -> {
             if (chatId != 0) {
                 // Charts first, so the buttons stay under the text, at the bottom of the chat.
@@ -152,7 +153,7 @@ public final class AthleteServices {
         }, props.schedule().watchFrom(), props.schedule().watchUntil(), clock);
 
         this.conversation = new Conversation(model, morning, decisions, memory, clock, new ArchiveHistory(archive, trends))
-                .structured(s.structured());
+                .structured(s.structured()).withSports(plans::sports);
         // The swim threshold and the ramp in the configuration are the administrator's own.
         this.planner = new Planner(intervals, writer, plans,
                 athlete.administrator() && props.athlete() != null ? props.athlete().swimCssSeconds() : null,
@@ -165,7 +166,7 @@ public final class AthleteServices {
         this.boards = new BoardReader(model, intervals, writer, dir.resolve("photos"), clock);
         this.router = new CommandRouter(s.telegram(), chatId, morning, feels, decisions, ledger, journal, model, clock, props.zone(),
                 allowed.isEmpty(), conversation, memory, boards, planCommands, adapter, merger, sessions, trends, segmentCommands)
-                .withReplies(replies);
+                .withReplies(replies).withSports(plans::sports);
     }
 
     /**
