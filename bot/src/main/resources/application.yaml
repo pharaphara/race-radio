@@ -41,6 +41,12 @@ race-radio:
   # Seals the Intervals.icu keys invited athletes give at check-in; without it, no invitation.
   # Make one with: openssl rand -base64 32
   secret-key: ${RACE_RADIO_SECRET_KEY:}
+  # The free model invited athletes may be put on (/modele Paul gratuit): any OpenAI-compatible
+  # service, OpenRouter by default. Its answers are checked by the program and filled from the facts.
+  free-model:
+    name: ${RACE_RADIO_FREE_MODEL:minimax/minimax-m3.1-flash:free}
+    base-url: ${RACE_RADIO_FREE_MODEL_BASE_URL:}
+    api-key: ${RACE_RADIO_FREE_MODEL_API_KEY:}
   temperament: COMMITTED
   telegram:
     token: ${TELEGRAM_TOKEN:}

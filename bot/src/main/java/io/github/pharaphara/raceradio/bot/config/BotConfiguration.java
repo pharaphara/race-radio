@@ -168,9 +168,19 @@ public class BotConfiguration {
             io.github.pharaphara.raceradio.bot.strava.StravaHarvest harvest,
             java.util.Optional<io.github.pharaphara.raceradio.bot.athlete.SecretBox> box,
             @org.springframework.beans.factory.annotation.Value("${race-radio.writes:}") String writes,
-            @org.springframework.beans.factory.annotation.Value("${race-radio.hr-strap-since:}") String strapSince) {
+            @org.springframework.beans.factory.annotation.Value("${race-radio.hr-strap-since:}") String strapSince,
+            @org.springframework.beans.factory.annotation.Value("${race-radio.free-model.name:minimax/minimax-m3.1-flash:free}") String freeModel,
+            @org.springframework.beans.factory.annotation.Value("${race-radio.free-model.base-url:}") String freeUrl,
+            @org.springframework.beans.factory.annotation.Value("${race-radio.free-model.api-key:}") String freeKey) {
+        // Every athlete's calls to a model share these permits: at most two at a time.
+        java.util.concurrent.Semaphore permits = new java.util.concurrent.Semaphore(2, true);
+        ModelTransport free = freeKey.isBlank() ? null : new io.github.pharaphara.raceradio.bot.llm.LimitedTransport(
+                new io.github.pharaphara.raceradio.bot.llm.GuardedTransport(new io.github.pharaphara.raceradio.bot.llm.OpenAiCompatibleTransport(
+                        freeUrl, freeKey, Duration.ofMinutes(3)), true), permits);
+        LOG.info("free model for invited athletes: {}", free == null ? "none configured" : freeModel);
         var shared = new io.github.pharaphara.raceradio.bot.athlete.AthleteServices.Shared(jdbc, telegram, clock, props,
-                SystemPrompt.fromClasspath(PROMPT), transport, library, harvest, structured(), writes, strapSince, null);
+                SystemPrompt.fromClasspath(PROMPT), new io.github.pharaphara.raceradio.bot.llm.LimitedTransport(transport, permits),
+                library, harvest, structured(), writes, strapSince, null, free, freeModel);
         return new io.github.pharaphara.raceradio.bot.athlete.AthleteRegistry(athletes, shared, a -> {
             if (a.administrator()) {
                 return props.intervals().apiKey();
