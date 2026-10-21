@@ -126,6 +126,7 @@ administrator (you), and the reset reports the rows of each table before and aft
 | `/mode demande` · `analyser` | create on request, or leave the calendar to another tool |
 | `/plan` | what your hours can buy against your objective |
 | `/seance demain cap facile` | one workout, proposed and calibrated, then Publier, Modifier or Annuler |
+| `/materiel haltères 2 × 10 kg, élastiques` · `/seance demain renfo 30 min` | your equipment, in plain words, and a strength session from it: timed on the watch (it beeps through each work and rest), the exercises in order in the note |
 | `/semaine` · `/semaine demain bloc seuil` | a whole week, proposed day by day under the same rules, published only on request |
 | `/deplacer jeudi vendredi` | one of its workouts moved to another day, steps and note kept, with a button to put it back |
 | `/modifier demain plus court` | one of its workouts redrafted from your change, shown before it replaces the old one |
