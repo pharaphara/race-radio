@@ -16,6 +16,12 @@ services:
     # A hard ceiling. Without one, a container on a busy host competes for memory until the host
     # thrashes instead of killing anything.
     mem_limit: 1g
+    # Logs rotate: three files of 10 MB at most, instead of one that grows for ever.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     restart: unless-stopped
 
 volumes:

@@ -117,14 +117,14 @@ public final class AthleteServices {
         this.intervals = s.intervalsApi() == null ? new IntervalsClient(credentials)
                 : new IntervalsClient(credentials, java.net.http.HttpClient.newHttpClient(), s.intervalsApi());
         Set<IntervalsWriter.Write> allowed = writes(athlete, s);
-        LOG.info("{}: Intervals.icu writes {}", athlete.label(), allowed.isEmpty() ? "DRY_RUN" : allowed);
-        this.writer = new IntervalsWriter(intervals, allowed, line -> LOG.info("{} intervals.icu {}", athlete.label(), line));
+        LOG.info("Intervals.icu writes {}", allowed.isEmpty() ? "DRY_RUN" : allowed);
+        this.writer = new IntervalsWriter(intervals, allowed, line -> LOG.info("intervals.icu {}", line));
 
         this.journal = new Journal(dir.resolve("llm"));
         Ledger ledger = new Ledger(db);
         BigDecimal budget = athlete.monthlyBudget() != null ? athlete.monthlyBudget() : props.model().monthlyBudget();
         Route route = route(athlete, s);
-        LOG.info("{}: model {}", athlete.label(), route.model());
+        LOG.info("model {}", route.model());
         this.model = new CoachModel(route.transport(), s.prompt(), ledger, journal, new Pricing(props.model().prices()),
                 route.model(), props.model().fallbacks(), budget, clock, props.zone());
         boolean structured = route.structured() || s.structured();
@@ -194,8 +194,7 @@ public final class AthleteServices {
             return new Route(s.transport(), s.props().model().name(), false);
         }
         if (s.free() == null) {
-            LOG.warn("{}: on the free model, but none is configured (RACE_RADIO_FREE_MODEL_API_KEY): computed texts only",
-                    athlete.label());
+            LOG.warn("on the free model, but none is configured (RACE_RADIO_FREE_MODEL_API_KEY): computed texts only");
             return new Route(new ModelTransport() {
                 @Override
                 public ModelReply send(ModelRequest request, SystemPrompt system) {

@@ -43,7 +43,7 @@ public final class AthleteRegistry {
 
     /** One athlete's coach. */
     public AthleteServices services(Athlete a) {
-        return built.computeIfAbsent(a.id().value(), id -> new AthleteServices(a, keys.apply(a), shared));
+        return built.computeIfAbsent(a.id().value(), id -> AthleteLog.call(a.id(), () -> new AthleteServices(a, keys.apply(a), shared)));
     }
 
     public AthleteServices administrator() {
@@ -62,7 +62,7 @@ public final class AthleteRegistry {
             try {
                 out.add(services(a));
             } catch (RuntimeException e) {
-                LOG.error("{}: could not be set up: {}", a.label(), e.getMessage());
+                AthleteLog.run(a.id(), () -> LOG.error("could not be set up: {}", e.getMessage()));
             }
         }
         return out;

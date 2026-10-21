@@ -41,7 +41,7 @@ public final class AthleteJobs {
             try {
                 adjusted = s.adapter().adapt(o.readiness().verdict());
             } catch (RuntimeException e) {
-                LOG.warn("{}: adjusting the day failed: {}", s.athlete().label(), e.getMessage());
+                LOG.warn("adjusting the day failed: {}", e.getMessage());
             }
             if (s.chatId() != 0) {
                 boolean planned = s.archive().planned(LocalDate.now(zone), 1).stream().anyMatch(l -> l.contains(" WORKOUT "));
@@ -55,7 +55,7 @@ public final class AthleteJobs {
                 telegram.sendWithButtonRows(s.chatId(), text, rows);
             }
         } catch (RuntimeException e) {
-            LOG.error("{}: morning call failed: {}", s.athlete().label(), e.getMessage());
+            LOG.error("morning call failed: {}", e.getMessage());
             if (s.chatId() != 0) {
                 telegram.send(s.chatId(), "Je n'ai pas pu faire le point ce matin : " + e.getMessage() + "\nRéessaie avec /aujourdhui.");
             }
@@ -67,10 +67,10 @@ public final class AthleteJobs {
         try {
             int n = s.segments().scanPending(max);
             if (n > 0) {
-                LOG.info("{}: segments: {} session(s) scanned", s.athlete().label(), n);
+                LOG.info("segments: {} session(s) scanned", n);
             }
         } catch (RuntimeException e) {
-            LOG.warn("{}: segment scan failed: {}", s.athlete().label(), e.getMessage());
+            LOG.warn("segment scan failed: {}", e.getMessage());
         }
     }
 
@@ -78,13 +78,13 @@ public final class AthleteJobs {
         try {
             int n = s.watcher().poll();
             if (n > 0) {
-                LOG.info("{}: {} session(s) reviewed", s.athlete().label(), n);
+                LOG.info("{} session(s) reviewed", n);
                 // The review just cached the streams: archiving the new session costs two list calls.
                 s.archive().refresh(3);
                 scanSegments(20);
             }
         } catch (RuntimeException e) {
-            LOG.warn("{}: looking for new activities failed: {}", s.athlete().label(), e.getMessage());
+            LOG.warn("looking for new activities failed: {}", e.getMessage());
         }
     }
 
@@ -98,7 +98,7 @@ public final class AthleteJobs {
                 telegram.send(s.chatId(), b.toString());
             }
         } catch (RuntimeException e) {
-            LOG.warn("{}: Sunday recap failed: {}", s.athlete().label(), e.getMessage());
+            LOG.warn("Sunday recap failed: {}", e.getMessage());
         }
     }
 
@@ -106,7 +106,7 @@ public final class AthleteJobs {
         try {
             s.archive().refresh(days);
         } catch (RuntimeException e) {
-            LOG.warn("{}: archive refresh failed: {}", s.athlete().label(), e.getMessage());
+            LOG.warn("archive refresh failed: {}", e.getMessage());
         }
     }
 
@@ -115,7 +115,7 @@ public final class AthleteJobs {
         try {
             s.archive().backfill();
         } catch (RuntimeException e) {
-            LOG.warn("{}: archive back-fill failed: {}", s.athlete().label(), e.getMessage());
+            LOG.warn("archive back-fill failed: {}", e.getMessage());
         }
         scanSegments(Integer.MAX_VALUE);
     }
@@ -123,7 +123,7 @@ public final class AthleteJobs {
     public void purgeJournal(int days) {
         int removed = s.journal().purgeOlderThan(days, LocalDate.now(zone));
         if (removed > 0) {
-            LOG.info("{}: journal: {} day file(s) older than {} days removed", s.athlete().label(), removed, days);
+            LOG.info("journal: {} day file(s) older than {} days removed", removed, days);
         }
     }
 }

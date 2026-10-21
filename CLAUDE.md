@@ -23,6 +23,10 @@ A self-hosted triathlon coach on Telegram, backed by Intervals.icu. Public repos
    reset copies, and every SQL statement in the code. Only `athlete`, `invitation`, `checkin` and the
    `segment` library are shared. The schema is applied by `Database`, never by Spring, and a schema
    change bumps `Database.VERSION` with an explicit move, never an `ALTER` in place.
+7. **Logs name athletes by number only.** Work for an athlete runs inside `AthleteLog.run`, which puts
+   `#<id>` in the logging context and the pattern prints it on every line; messages never carry a
+   name, a key, a token or what an athlete wrote. Prompts and answers belong in the journal, not the
+   logs. `LogTest` checks a whole check-in for a key or a name.
 
 ## Facts established against the real API
 
