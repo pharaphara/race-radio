@@ -40,6 +40,7 @@ public final class CommandRouter {
             /sports natation off · les sports de la saison
             /seance demain cap facile · une séance proposée, montrée avant publication
             /semaine · ta semaine proposée, jour par jour, montrée avant publication
+            /materiel haltères 2 × 10 kg, élastiques · ton matériel, pour les séances de renfo (/seance demain renfo 30 min)
             /deplacer jeudi vendredi · une de mes séances changée de jour
             /modifier demain plus court · une de mes séances revue, montrée avant publication
             /plan · où tu en es face à ton objectif
@@ -230,6 +231,7 @@ public final class CommandRouter {
                 sessions.week(text);
                 yield null;
             }
+            case "/materiel", "/matériel" -> sessions.strength().equipment(text);
             case "/deplacer", "/déplacer" -> {
                 sessions.edits().move(text);
                 yield null;

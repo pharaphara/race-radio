@@ -136,10 +136,35 @@ public final class SessionCreator {
         this.clock = clock;
     }
 
-    /** Handles {@code /seance ...}. */
+    /** Handles {@code /seance ...}: a strength request goes to the strength sessions, the rest here. */
     public void draft(String text) {
         amending = null;
+        String rest = text.replaceFirst("(?i)^/s[eé]ance(@\\S+)?\\s*", "").strip();
+        if (!rest.isEmpty() && StrengthSessions.asked(rest)) {
+            LocalDate today = LocalDate.now(clock);
+            try {
+                DayRequest d = dayRequest(rest, today);
+                if (d.day().isBefore(today)) {
+                    telegram.send(chatId, "Ce jour est passé.");
+                    return;
+                }
+                strength().draft(d.day(), d.rest().isEmpty() ? rest : d.rest());
+            } catch (DateTimeParseException | IllegalArgumentException e) {
+                telegram.send(chatId, "Je n'ai pas compris le jour. Exemple : /seance demain renfo 30 min");
+            }
+            return;
+        }
         show(prepare(text));
+    }
+
+    private StrengthSessions strength;
+
+    /** Strength sessions from the athlete's equipment, and /materiel. */
+    public synchronized StrengthSessions strength() {
+        if (strength == null) {
+            strength = new StrengthSessions(model, writer, plans, telegram, chatId, d -> context(d, 3));
+        }
+        return strength;
     }
 
     /** Handles {@code /semaine ...}. */
@@ -415,10 +440,17 @@ public final class SessionCreator {
 
     /** True for the buttons this class put under its messages. */
     public boolean handles(String data) {
+        if (strength().handles(data)) {
+            return true;
+        }
         return data.matches("(pub|drop|del|edit|det|delw):\\d+");
     }
 
     public void callback(String data) {
+        if (strength().handles(data)) {
+            strength().callback(data);
+            return;
+        }
         String[] parts = data.split(":", 2);
         long id = Long.parseLong(parts[1]);
         switch (parts[0]) {
