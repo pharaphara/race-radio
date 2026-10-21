@@ -88,13 +88,24 @@ public class BotConfiguration {
         return new io.github.pharaphara.raceradio.bot.llm.FallbackTransport(primary, transport(fallback), props.model().fallbackName());
     }
 
+    /** Claude keeps the rules on its own; another model's answers are checked by the program. */
+    private ModelTransport guarded(ModelTransport t) {
+        String mode = props.model().guard() == null ? "enforce" : props.model().guard().strip();
+        return switch (mode) {
+            case "off" -> t;
+            case "report" -> new io.github.pharaphara.raceradio.bot.llm.GuardedTransport(t, false);
+            case "enforce" -> new io.github.pharaphara.raceradio.bot.llm.GuardedTransport(t, true);
+            default -> throw new IllegalStateException("race-radio.model.guard must be enforce, report or off, not " + mode);
+        };
+    }
+
     private ModelTransport transport(String kind) {
         return switch (kind.strip()) {
             case "subscription" -> new ClaudeCodeTransport(props.model().claudeCommand(),
                     props.dataDir().resolve("claude"), Duration.ofMinutes(5));
             case "api" -> new AnthropicTransport(props.model().apiKey());
-            case "openai", "openrouter" -> new io.github.pharaphara.raceradio.bot.llm.OpenAiCompatibleTransport(
-                    props.model().baseUrl(), props.model().endpointKey(), Duration.ofMinutes(3));
+            case "openai", "openrouter" -> guarded(new io.github.pharaphara.raceradio.bot.llm.OpenAiCompatibleTransport(
+                    props.model().baseUrl(), props.model().endpointKey(), Duration.ofMinutes(3)));
             default -> throw new IllegalStateException("race-radio.model.transport must be subscription, api or openai, not " + kind);
         };
     }
@@ -191,7 +202,12 @@ public class BotConfiguration {
                                 io.github.pharaphara.raceradio.bot.archive.Archive archive,
                                 io.github.pharaphara.raceradio.bot.strava.LocalSegments segments) {
         return new SessionReview(intervals, writer, model, decisions, props.model().reviewEffort(), clock, streams::get)
-                .withArchive(archive).withSegments(segments);
+                .withArchive(archive).withSegments(segments).structured(structured());
+    }
+
+    /** Reviews and answers as JSON with references to the facts, for models that need the help. */
+    private boolean structured() {
+        return "json".equalsIgnoreCase(props.model().format() == null ? "" : props.model().format().strip());
     }
 
     @Bean
@@ -220,7 +236,7 @@ public class BotConfiguration {
                                                                      io.github.pharaphara.raceradio.bot.archive.Archive archive,
                                                                      io.github.pharaphara.raceradio.bot.archive.Trends trends) {
         return new io.github.pharaphara.raceradio.bot.chat.Conversation(model, morning, decisions, memory, clock,
-                new io.github.pharaphara.raceradio.bot.archive.ArchiveHistory(archive, trends));
+                new io.github.pharaphara.raceradio.bot.archive.ArchiveHistory(archive, trends)).structured(structured());
     }
 
     @Bean

@@ -168,8 +168,14 @@ public final class ClaudeCodeTransport implements ModelTransport {
     /** Reads the command's JSON result. Package-visible for tests. */
     static ModelReply parse(String json, long latencyMs) {
         JsonNode d = JSON.readTree(json);
-        if (d.path("is_error").asBoolean(false) && !d.path("result").isString()) {
-            throw new IllegalStateException("claude reported an error: " + d.path("subtype").asString("unknown"));
+        if (d.path("is_error").asBoolean(false)) {
+            // With an error the result is the command line's own message ("requires usage credits", a
+            // usage limit reached), never an answer: sending it to the athlete as a review would be wrong.
+            throw new IllegalStateException("claude reported an error: " + d.path("subtype").asString("unknown")
+                    + (d.path("result").isString() ? ": " + firstLine(d.path("result").asString()) : ""));
+        }
+        if (d.path("modelUsage").isObject() && d.path("modelUsage").isEmpty() && d.path("usage").path("output_tokens").asLong(0) == 0) {
+            throw new IllegalStateException("claude answered without any model: " + firstLine(d.path("result").asString("")));
         }
         JsonNode u = d.path("usage");
         Usage usage = new Usage(u.path("input_tokens").asLong(0), u.path("output_tokens").asLong(0),

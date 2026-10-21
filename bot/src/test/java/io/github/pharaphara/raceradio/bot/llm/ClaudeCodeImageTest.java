@@ -25,7 +25,7 @@ class ClaudeCodeImageTest {
                 + "printf '%s\\n' \"$@\" > \"" + dir.resolve("args.txt") + "\"\n"
                 + "ls -A > \"" + dir.resolve("cwd.txt") + "\"\n"
                 + "cat > \"" + dir.resolve("stdin.txt") + "\"\n"
-                + "echo '{\"result\":\"AMRAP 12 min\",\"stop_reason\":\"end_turn\",\"usage\":{},\"modelUsage\":{}}'\n");
+                + "echo '{\"result\":\"AMRAP 12 min\",\"stop_reason\":\"end_turn\",\"usage\":{\"output_tokens\":5},\"modelUsage\":{\"claude-sonnet-5-5\":{}}}'\n");
         Files.setPosixFilePermissions(script, PosixFilePermissions.fromString("rwx------"));
         Path work = dir.resolve("work");
         var t = new ClaudeCodeTransport(script.toString(), work, Duration.ofSeconds(20));

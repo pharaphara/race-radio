@@ -50,6 +50,11 @@ public record RaceRadioProperties(
      * @param endpointKey     {@code openai} transport: its API key, empty for a local model
      * @param fallbackTransport  a second transport asked when the first fails or declines, or empty
      * @param fallbackName    the model the second transport asks for
+     * @param guard           answers from an {@code openai} transport are checked for invented numbers
+     *                        and baseless explanations: {@code enforce} refuses them (the fallback then
+     *                        answers), {@code report} only logs them, {@code off} skips the check
+     * @param format          {@code text}: reviews and answers written as prose; {@code json}: filled as JSON
+     *                        whose figures are references to the facts, so none can be computed or made up
      * @param claudeCommand   path of the {@code claude} command, for the subscription transport
      * @param prices          dollars per million tokens, per answering model, for the API transport;
      *                        prices change, so they live here and not in code
@@ -63,7 +68,8 @@ public record RaceRadioProperties(
     public record Model(String transport, String claudeCommand, String apiKey, String name,
                         String morningEffort, String reviewEffort, boolean fallbacks,
                         BigDecimal monthlyBudget, Map<String, Prices> prices, int journalDays,
-                        String baseUrl, String endpointKey, String fallbackTransport, String fallbackName) {
+                        String baseUrl, String endpointKey, String fallbackTransport, String fallbackName, String guard,
+                        String format) {
     }
 
     public record Prices(BigDecimal input, BigDecimal output, BigDecimal cacheWrite, BigDecimal cacheRead) {
