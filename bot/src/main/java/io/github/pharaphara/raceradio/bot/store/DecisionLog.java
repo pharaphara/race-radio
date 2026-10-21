@@ -1,14 +1,12 @@
 package io.github.pharaphara.raceradio.bot.store;
 
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Optional;
 
 /** Every decision with its evidence, so that "why?" can be answered months later. */
-@Repository
 public class DecisionLog {
 
     public record Decision(String at, String kind, String day, String verdict, String model,

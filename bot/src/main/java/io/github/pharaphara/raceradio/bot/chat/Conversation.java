@@ -76,6 +76,15 @@ public final class Conversation {
     /** The context of the last prompt, where an answer's references are looked up. */
     private volatile tools.jackson.databind.JsonNode lastContext;
 
+
+    /** The athlete's sports: recommendations stay within them unless the athlete brings up another. */
+    private java.util.function.Supplier<java.util.Set<String>> sports = java.util.Set::of;
+
+    public Conversation withSports(java.util.function.Supplier<java.util.Set<String>> sports) {
+        this.sports = sports;
+        return this;
+    }
+
     public Conversation structured(boolean on) {
         this.structured = on;
         return this;
@@ -225,6 +234,9 @@ public final class Conversation {
                 d.message() == null ? "" : d.message(), "facts", structured ? parsed(d.evidenceJson())
                         : d.evidenceJson().length() > 8_000 ? d.evidenceJson().substring(0, 8_000) : d.evidenceJson())));
         context.put("plannedNextDays", history.plannedDetail(3));
+        if (!sports.get().isEmpty()) {
+            context.put("sportsPractised", io.github.pharaphara.raceradio.bot.plan.Sports.french(sports.get()));
+        }
         List<Conversations.Note> notes = memory.activeNotes();
         context.put("athleteNotes", notes.stream().map(n -> n.at().substring(0, 10) + " " + n.text()).toList());
         List<Conversations.Turn> turns = memory.last(TURNS);
@@ -241,6 +253,7 @@ public final class Conversation {
                 You cannot change a verdict from here. To report how they feel there is
                 /ressenti, to keep a fact /note, to redo the morning call /aujourdhui. If they report pain that
                 persists, or a warning sign, recommend a health professional, once and plainly.
+                Recommend sessions only in sportsPractised, unless the athlete brings up another sport.
                 Asked how to do a planned session (plannedNextDays), answer as a briefing: what it is for,
                 its structure with the durations and targets given, two or three cues, how to tell it went
                 right, a target effort out of 10, fuelling for sessions over 90 minutes; bold short titles and

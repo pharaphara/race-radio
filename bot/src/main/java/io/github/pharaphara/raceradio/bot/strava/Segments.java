@@ -58,6 +58,16 @@ public final class Segments {
         this.chatId = chatId;
     }
 
+    /** Only the administrator adds to the shared library: a drawn segment, or a whole area from Strava. */
+    private boolean administrator;
+    private ZoneHarvest zone;
+
+    public Segments withAdministration(boolean administrator, ZoneHarvest zone) {
+        this.administrator = administrator;
+        this.zone = zone;
+        return this;
+    }
+
     /** Gives the command the locally timed passages and what it needs to create segments. */
     public Segments withLocal(LocalSegments local, SegmentLibrary library, StreamCache streams, Clock clock) {
         this.local = local;
@@ -74,7 +84,13 @@ public final class Segments {
             return;
         }
         if (rest.toLowerCase(Locale.ROOT).startsWith("nouveau")) {
-            telegram.send(chatId, create(rest));
+            telegram.send(chatId, administrator ? create(rest)
+                    : "Les segments sont communs à tous : seul l'administrateur en ajoute. Demande-lui celui que tu veux.");
+            return;
+        }
+        if (rest.toLowerCase(Locale.ROOT).startsWith("zone")) {
+            telegram.send(chatId, administrator && zone != null ? zone(rest.substring(4).strip())
+                    : "Seul l'administrateur ajoute des segments, avec son accès à Strava.");
             return;
         }
         List<Map<String, Object>> found = find(rest);
@@ -99,14 +115,17 @@ public final class Segments {
     }
 
     String overview() {
-        StravaHarvest.Progress p = harvest.progress();
         StringBuilder b = new StringBuilder();
-        if (p.activities() > 0 && !p.done()) {
-            b.append("Récupération Strava en cours : ").append(p.detailed()).append(" activités sur ").append(p.activities())
-                    .append(", ").append(p.segmentsWithTrace()).append(" segments sur ").append(p.segments()).append(".\n\n");
+        // Only the administrator harvests Strava; the others are timed on their GPS from the start.
+        if (harvest != null) {
+            StravaHarvest.Progress p = harvest.progress();
+            if (p.activities() > 0 && !p.done()) {
+                b.append("Récupération Strava en cours : ").append(p.detailed()).append(" activités sur ").append(p.activities())
+                        .append(", ").append(p.segmentsWithTrace()).append(" segments sur ").append(p.segments()).append(".\n\n");
+            }
+            harvest.ended().ifPresent(d -> b.append("Strava ne donne plus tes passages depuis le ").append(DAY.format(d))
+                    .append(" : je les chronomètre moi-même sur ta trace GPS.\n\n"));
         }
-        harvest.ended().ifPresent(d -> b.append("Strava ne donne plus tes passages depuis le ").append(DAY.format(d))
-                .append(" : je les chronomètre moi-même sur ta trace GPS.\n\n"));
         List<Map<String, Object>> top = jdbc.queryForList("SELECT id, name FROM segment").stream()
                 .map(s -> {
                     List<Effort> e = efforts(((Number) s.get("id")).longValue());
@@ -193,6 +212,64 @@ public final class Segments {
                 .filter(r -> (Integer) r.get("n") > 0 && plain((String) r.get("name")).contains(q))
                 .sorted(Comparator.comparingInt((Map<String, Object> r) -> (Integer) r.get("n")).reversed())
                 .toList();
+    }
+
+    private static final java.util.regex.Pattern ZONE = java.util.regex.Pattern.compile(
+            "(?i)^(.+?)\\s+(\\d+(?:[.,]\\d+)?)\\s*(?:km)?(?:\\s+(v[ée]lo|course|cap))?$");
+    private static final java.util.regex.Pattern COORDINATES = java.util.regex.Pattern.compile("^(-?\\d+(?:\\.\\d+)?)\\s*[,;]\\s*(-?\\d+(?:\\.\\d+)?)$");
+
+    /**
+     * {@code zone <lieu ou lat,lon> <rayon km> [vélo|course]}: every Strava segment around a place,
+     * the place given as coordinates or as a word of one of the administrator's own activities,
+     * whose start is then taken from its GPS trace.
+     */
+    String zone(String args) {
+        if (args.isBlank()) {
+            return zone.status() + "\nPour une nouvelle zone : /segment zone Meyrueis 20, ou /segment zone 44.18,3.43 20 course";
+        }
+        java.util.regex.Matcher m = ZONE.matcher(args);
+        if (!m.matches()) {
+            return "Format : /segment zone <lieu ou lat,lon> <rayon en km> [vélo|course]. Exemple : /segment zone Meyrueis 20";
+        }
+        double radius = Double.parseDouble(m.group(2).replace(',', '.'));
+        if (radius <= 0 || radius > 50) {
+            return "Un rayon entre 1 et 50 km.";
+        }
+        boolean running = m.group(3) != null && !m.group(3).toLowerCase(Locale.ROOT).startsWith("v");
+        java.util.Optional<double[]> at = place(m.group(1).strip());
+        if (at.isEmpty()) {
+            return "Je ne trouve pas « " + m.group(1).strip() + " » : donne des coordonnées (44.18,3.43), ou un mot du nom d'une de tes sorties.";
+        }
+        int squares = zone.start(at.get()[0], at.get()[1], radius, running);
+        return String.format(Locale.FRANCE, "C'est noté : %d carrés de %.1f km à explorer autour de %.4f, %.4f, dans le quota Strava. "
+                + "Les nouveaux segments et leurs tracés arrivent au fil des heures, puis chacun retrouve ses passages. "
+                + "/segment zone pour suivre.", squares, ZoneHarvest.TILE_KM, at.get()[0], at.get()[1]);
+    }
+
+    /** Coordinates, or the start of the latest own activity whose name holds the words. */
+    private java.util.Optional<double[]> place(String words) {
+        java.util.regex.Matcher c = COORDINATES.matcher(words);
+        if (c.matches()) {
+            return java.util.Optional.of(new double[]{Double.parseDouble(c.group(1)), Double.parseDouble(c.group(2))});
+        }
+        for (Map<String, Object> a : jdbc.queryForList("SELECT id FROM archive_activity WHERE athlete_id = ? "
+                + "AND json_extract(json, '$.name') LIKE ? ORDER BY day DESC LIMIT 5", athlete, "%" + words + "%")) {
+            try {
+                var s = streams.get((String) a.get("id"));
+                var lat = s.get("lat");
+                var lng = s.get("lng");
+                if (lat.isPresent() && lng.isPresent()) {
+                    for (int i = 0; i < lat.get().length(); i++) {
+                        if (!Double.isNaN(lat.get().at(i)) && !Double.isNaN(lng.get().at(i)) && lat.get().at(i) != 0) {
+                            return java.util.Optional.of(new double[]{lat.get().at(i), lng.get().at(i)});
+                        }
+                    }
+                }
+            } catch (RuntimeException e) {
+                // That activity's trace is not to be had; the next one may be.
+            }
+        }
+        return java.util.Optional.empty();
     }
 
     List<Effort> efforts(long segmentId) {

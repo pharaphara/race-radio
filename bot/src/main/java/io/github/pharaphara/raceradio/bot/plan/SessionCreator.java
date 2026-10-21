@@ -33,6 +33,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Matcher;
@@ -135,10 +136,35 @@ public final class SessionCreator {
         this.clock = clock;
     }
 
-    /** Handles {@code /seance ...}. */
+    /** Handles {@code /seance ...}: a strength request goes to the strength sessions, the rest here. */
     public void draft(String text) {
         amending = null;
+        String rest = text.replaceFirst("(?i)^/s[eé]ance(@\\S+)?\\s*", "").strip();
+        if (!rest.isEmpty() && StrengthSessions.asked(rest)) {
+            LocalDate today = LocalDate.now(clock);
+            try {
+                DayRequest d = dayRequest(rest, today);
+                if (d.day().isBefore(today)) {
+                    telegram.send(chatId, "Ce jour est passé.");
+                    return;
+                }
+                strength().draft(d.day(), d.rest().isEmpty() ? rest : d.rest());
+            } catch (DateTimeParseException | IllegalArgumentException e) {
+                telegram.send(chatId, "Je n'ai pas compris le jour. Exemple : /seance demain renfo 30 min");
+            }
+            return;
+        }
         show(prepare(text));
+    }
+
+    private StrengthSessions strength;
+
+    /** Strength sessions from the athlete's equipment, and /materiel. */
+    public synchronized StrengthSessions strength() {
+        if (strength == null) {
+            strength = new StrengthSessions(model, writer, plans, telegram, chatId, d -> context(d, 3));
+        }
+        return strength;
     }
 
     /** Handles {@code /semaine ...}. */
@@ -220,13 +246,9 @@ public final class SessionCreator {
     public Prepared prepare(String text) {
         String rest = text.replaceFirst("(?i)^/s[eé]ance(@\\S+)?\\s*", "").strip();
         if (rest.isEmpty()) {
-            return new Prepared("""
-                    Dis-moi quoi et quand, je m'occupe du reste :
-                    /seance demain cap facile
-                    /seance jeudi une VO2 à vélo
-                    /seance samedi sortie longue 2h30
-                    /seance demain vélo 3x10min à 280W
-                    Pour toute une semaine : /semaine""", null);
+            return new Prepared("Dis-moi quoi et quand, je m'occupe du reste :\n"
+                    + String.join("\n", Sports.examples(plans.sports()).stream().map(e -> "/seance " + e).toList())
+                    + "\nPour toute une semaine : /semaine", null);
         }
         LocalDate today = LocalDate.now(clock);
         LocalDate day;
@@ -241,7 +263,7 @@ public final class SessionCreator {
             return new Prepared("Ce jour est passé.", null);
         }
         if (rest.isEmpty()) {
-            return new Prepared("Et quelle séance ? Par exemple : /seance demain cap facile", null);
+            return new Prepared("Et quelle séance ? Par exemple : /seance " + Sports.examples(plans.sports()).getFirst(), null);
         }
         return draftOne(day, rest, null, null);
     }
@@ -282,6 +304,21 @@ public final class SessionCreator {
             }
             JsonNode workout = root.has("workout") ? root.path("workout") : root;
             Workout w = buildable(JSON.treeToValue(workout, Draft.class).build(t));
+            // What the coach chooses stays in the athlete's sports; a sport they name is theirs to ask for.
+            Set<String> allowed = Sports.allowed(plans.sports(), request);
+            if (replacing == null && !allowed.contains(WeekCheck.family(w.sport()))) {
+                root = ask(prompt(day, request, t, context(day, 3), root.toString(), "The athlete practises only "
+                        + String.join(", ", allowed) + ": prescribe the workout in one of these sports, keep the rest."));
+                if (root == null) {
+                    return new Prepared(lastQuestion, null);
+                }
+                workout = root.has("workout") ? root.path("workout") : root;
+                w = buildable(JSON.treeToValue(workout, Draft.class).build(t));
+                if (!allowed.contains(WeekCheck.family(w.sport()))) {
+                    return new Prepared("Je n'arrive pas à te proposer cette séance dans tes sports (" + Sports.french(allowed)
+                            + "). Précise le sport, par exemple : /seance " + Sports.examples(allowed).getFirst(), null);
+                }
+            }
             String why = text(root, "why");
             String note = WorkoutText.note(text(root, "note"));
             Pending p = new Pending(false, day, List.of(new Item(day, w, note)), why, request, root.toString(), replacing);
@@ -306,7 +343,9 @@ public final class SessionCreator {
                 return new Prepared(lastQuestion, null);
             }
             List<Item> items = weekItems(root, t);
-            List<String> problems = WeekCheck.problems(start, WEEK, items.stream().map(i -> new WeekCheck.Planned(i.day(), i.workout())).toList(), t);
+            Set<String> allowed = Sports.allowed(plans.sports(), request);
+            List<String> problems = WeekCheck.problems(start, WEEK, items.stream().map(i -> new WeekCheck.Planned(i.day(), i.workout())).toList(),
+                    t, allowed);
             if (!problems.isEmpty()) {
                 // One second try, told exactly what broke; the program, not the model, keeps the rules.
                 root = ask(weekPrompt(start, request, t, context, root.toString(),
@@ -315,7 +354,8 @@ public final class SessionCreator {
                     return new Prepared(lastQuestion, null);
                 }
                 items = weekItems(root, t);
-                problems = WeekCheck.problems(start, WEEK, items.stream().map(i -> new WeekCheck.Planned(i.day(), i.workout())).toList(), t);
+                problems = WeekCheck.problems(start, WEEK, items.stream().map(i -> new WeekCheck.Planned(i.day(), i.workout())).toList(),
+                        t, allowed);
                 if (!problems.isEmpty()) {
                     return new Prepared("Je n'arrive pas à te proposer une semaine qui respecte les règles (" + String.join(" ; ", problems)
                             + "). Reformule ta demande, par exemple avec moins de séances dures.", null);
@@ -380,7 +420,8 @@ public final class SessionCreator {
             b.append("Time available per weekday (minutes): ").append(available).append('\n');
         }
         plans.objectives().forEach(o -> b.append("Objective: ").append(o.objective()).append('\n'));
-        b.append("Sports in season: ").append(plans.sports()).append('\n');
+        b.append("Sports the athlete practises: ").append(String.join(", ", plans.sports()))
+                .append(". Choose among these, unless the request names another sport.\n");
         try {
             List<String> recent = archive.recent(RECENT_DAYS);
             b.append("Sessions of the last ").append(RECENT_DAYS).append(" days:\n")
@@ -399,10 +440,17 @@ public final class SessionCreator {
 
     /** True for the buttons this class put under its messages. */
     public boolean handles(String data) {
+        if (strength().handles(data)) {
+            return true;
+        }
         return data.matches("(pub|drop|del|edit|det|delw):\\d+");
     }
 
     public void callback(String data) {
+        if (strength().handles(data)) {
+            strength().callback(data);
+            return;
+        }
         String[] parts = data.split(":", 2);
         long id = Long.parseLong(parts[1]);
         switch (parts[0]) {

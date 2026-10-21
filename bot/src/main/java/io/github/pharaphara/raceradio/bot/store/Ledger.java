@@ -3,7 +3,6 @@ package io.github.pharaphara.raceradio.bot.store;
 import io.github.pharaphara.raceradio.bot.llm.ModelReply;
 import io.github.pharaphara.raceradio.bot.llm.ModelRequest;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -12,7 +11,6 @@ import java.time.ZoneId;
 import java.util.List;
 
 /** The record of every call to the model and its cost. */
-@Repository
 public class Ledger {
 
     private final JdbcTemplate jdbc;

@@ -2,7 +2,6 @@ package io.github.pharaphara.raceradio.bot.store;
 
 import io.github.pharaphara.raceradio.core.readiness.Feel;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -10,7 +9,6 @@ import java.util.List;
 import java.util.Optional;
 
 /** What the athlete reported, one record per day; a later report the same day replaces the first. */
-@Repository
 public class FeelStore {
 
     private final JdbcTemplate jdbc;

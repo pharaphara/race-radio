@@ -61,10 +61,15 @@ public class StravaHarvest {
      * says stop. Cheap when everything is already harvested: one list call.
      */
     public synchronized Progress run() {
-        if (!strava.configured() || clock.instant().isBefore(pausedUntil) || ended().isPresent()) {
+        if (!strava.configured() || clock.instant().isBefore(pausedUntil)) {
             return progress();
         }
         try {
+            if (ended().isPresent()) {
+                // Efforts need the subscription; segment traces do not, and areas still bring new segments.
+                fetchSegments();
+                return progress();
+            }
             if (clock.instant().isAfter(lastListed.plus(LIST_EVERY))) {
                 listActivities();
                 lastListed = clock.instant();

@@ -2,7 +2,6 @@ package io.github.pharaphara.raceradio.bot.store;
 
 import io.github.pharaphara.raceradio.core.plan.Objective;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.stereotype.Repository;
 
 import java.time.DayOfWeek;
 import java.time.Instant;
@@ -15,7 +14,6 @@ import java.util.Optional;
 import java.util.Set;
 
 /** Objectives and the settings the planner reads. */
-@Repository
 public class Plans {
 
     /**
@@ -76,6 +74,15 @@ public class Plans {
 
     public void mode(Mode m) {
         set("mode", m.name());
+    }
+
+    /** What the athlete owns for strength work, in their own words; empty for bodyweight only. */
+    public String equipment() {
+        return get("equipment").orElse("");
+    }
+
+    public void equipment(String words) {
+        set("equipment", words);
     }
 
     /** Sports in season; all three by default. */

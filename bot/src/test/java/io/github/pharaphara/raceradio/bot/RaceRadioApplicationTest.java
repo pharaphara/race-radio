@@ -34,8 +34,9 @@ class RaceRadioApplicationTest {
 
     @Test
     void startsWithoutSecretsAndInDryRun() {
-        assertThat(context.getBean(io.github.pharaphara.raceradio.icu.IntervalsWriter.class).mode())
-                .isEqualTo(io.github.pharaphara.raceradio.icu.IntervalsWriter.Mode.DRY_RUN);
+        var administrator = context.getBean(io.github.pharaphara.raceradio.bot.athlete.AthleteRegistry.class).administrator();
+        assertThat(administrator.writer().mode()).isEqualTo(io.github.pharaphara.raceradio.icu.IntervalsWriter.Mode.DRY_RUN);
+        assertThat(administrator.athlete().administrator()).isTrue();
         assertThat(Files.exists(data.resolve("race-radio.db"))).isTrue();
     }
 }

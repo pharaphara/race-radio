@@ -7,8 +7,7 @@ import java.util.function.Consumer;
 
 /**
  * Listens for messages with long polling, so no public endpoint is needed, and hands each one to
- * the handler. Anything from a chat other than the athlete's is dropped without an answer: the bot
- * does not reveal that it exists.
+ * the handler, which decides whose it is: the athletes' dispatcher.
  */
 public final class TelegramPoller implements Runnable {
 
@@ -16,13 +15,11 @@ public final class TelegramPoller implements Runnable {
     private static final int WAIT_SECONDS = 50;
 
     private final TelegramClient telegram;
-    private final long allowedChatId;
     private final Consumer<TelegramClient.Update> handler;
     private volatile boolean running = true;
 
-    public TelegramPoller(TelegramClient telegram, long allowedChatId, Consumer<TelegramClient.Update> handler) {
+    public TelegramPoller(TelegramClient telegram, Consumer<TelegramClient.Update> handler) {
         this.telegram = telegram;
-        this.allowedChatId = allowedChatId;
         this.handler = handler;
     }
 
@@ -38,10 +35,6 @@ public final class TelegramPoller implements Runnable {
             try {
                 for (TelegramClient.Update u : telegram.updates(offset, WAIT_SECONDS)) {
                     offset = u.updateId() + 1;
-                    if (u.chatId() != allowedChatId) {
-                        LOG.info("ignored an update from another chat");
-                        continue;
-                    }
                     try {
                         handler.accept(u);
                     } catch (RuntimeException e) {

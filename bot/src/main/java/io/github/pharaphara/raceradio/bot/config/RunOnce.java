@@ -33,54 +33,56 @@ import java.time.LocalDate;
 public class RunOnce implements ApplicationRunner {
 
     private final String once;
-    private final MorningCheck morning;
-    private final SessionReview review;
-    private final IntervalsClient intervals;
     private final ConfigurableApplicationContext context;
     private final java.nio.file.Path charts;
-    private final io.github.pharaphara.raceradio.bot.strength.BoardReader boards;
-    private final io.github.pharaphara.raceradio.bot.plan.SessionCreator sessions;
-    private final io.github.pharaphara.raceradio.bot.archive.Archive archive;
-    private final io.github.pharaphara.raceradio.bot.archive.Trends trends;
+    private final io.github.pharaphara.raceradio.bot.athlete.AthleteRegistry registry;
     private final io.github.pharaphara.raceradio.bot.strava.StravaHarvest strava;
-    private final io.github.pharaphara.raceradio.bot.chat.Conversation conversation;
-    private final io.github.pharaphara.raceradio.bot.store.Conversations memory;
-    private final io.github.pharaphara.raceradio.bot.strava.Calibration calibration;
-
     private final io.github.pharaphara.raceradio.bot.store.Database.Outcome database;
+    // The administrator's coach, set when a job runs: one-off runs act for the administrator.
+    private MorningCheck morning;
+    private SessionReview review;
+    private IntervalsClient intervals;
+    private io.github.pharaphara.raceradio.bot.strength.BoardReader boards;
+    private io.github.pharaphara.raceradio.bot.plan.SessionCreator sessions;
+    private io.github.pharaphara.raceradio.bot.archive.Archive archive;
+    private io.github.pharaphara.raceradio.bot.archive.Trends trends;
+    private io.github.pharaphara.raceradio.bot.chat.Conversation conversation;
+    private io.github.pharaphara.raceradio.bot.store.Conversations memory;
+    private io.github.pharaphara.raceradio.bot.strava.Calibration calibration;
 
-    public RunOnce(@Value("${race-radio.once:}") String once, MorningCheck morning, SessionReview review,
-                   IntervalsClient intervals, ConfigurableApplicationContext context, RaceRadioProperties props,
-                   io.github.pharaphara.raceradio.bot.strength.BoardReader boards,
-                   io.github.pharaphara.raceradio.bot.plan.SessionCreator sessions,
-                   io.github.pharaphara.raceradio.bot.archive.Archive archive,
-                   io.github.pharaphara.raceradio.bot.archive.Trends trends,
+    public RunOnce(@Value("${race-radio.once:}") String once, ConfigurableApplicationContext context, RaceRadioProperties props,
+                   io.github.pharaphara.raceradio.bot.athlete.AthleteRegistry registry,
                    io.github.pharaphara.raceradio.bot.strava.StravaHarvest strava,
-                   io.github.pharaphara.raceradio.bot.chat.Conversation conversation,
-                   io.github.pharaphara.raceradio.bot.store.Conversations memory,
-                   io.github.pharaphara.raceradio.bot.strava.Calibration calibration,
                    io.github.pharaphara.raceradio.bot.store.Database.Outcome database) {
-        this.database = database;
-        this.calibration = calibration;
-        this.conversation = conversation;
-        this.memory = memory;
-        this.strava = strava;
-        this.archive = archive;
-        this.trends = trends;
-        this.sessions = sessions;
-        this.boards = boards;
-        this.charts = props.dataDir().resolve("charts");
         this.once = once;
-        this.morning = morning;
-        this.review = review;
-        this.intervals = intervals;
         this.context = context;
+        this.charts = props.dataDir().resolve("charts");
+        this.registry = registry;
+        this.strava = strava;
+        this.database = database;
+    }
+
+    private void forAdministrator() {
+        io.github.pharaphara.raceradio.bot.athlete.AthleteServices a = registry.administrator();
+        morning = a.morning();
+        review = a.review();
+        intervals = a.intervals();
+        boards = a.boards();
+        sessions = a.sessions();
+        archive = a.archive();
+        trends = a.trends();
+        conversation = a.conversation();
+        memory = a.memory();
+        calibration = a.calibration();
     }
 
     @Override
     public void run(ApplicationArguments args) {
         if (once.isBlank()) {
             return;
+        }
+        if (!once.equals("reset")) {
+            forAdministrator();
         }
         if (once.equals("reset")) {
             // The move itself was made when the database was prepared, before anything opened it.

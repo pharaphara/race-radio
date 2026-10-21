@@ -28,8 +28,9 @@ public final class TestDb {
 
     /** One more athlete in the same database, to check that two never see each other's data. */
     public static AthleteDb another(AthleteDb db, long chatId) {
-        Long id = db.jdbc().queryForObject("INSERT INTO athlete (chat_id, role, created_at) VALUES (?, 'athlete', ?) RETURNING id",
-                Long.class, chatId, Instant.now().toString());
+        Long id = db.jdbc().queryForObject("INSERT INTO athlete (chat_id, role, intervals_athlete_id, created_at) "
+                        + "VALUES (?, 'athlete', ?, ?) RETURNING id",
+                Long.class, chatId, "i" + chatId, Instant.now().toString());
         return new AthleteDb(db.jdbc(), new AthleteId(id));
     }
 }
