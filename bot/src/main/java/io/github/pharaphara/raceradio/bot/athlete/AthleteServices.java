@@ -75,7 +75,7 @@ public final class AthleteServices {
     public record Shared(JdbcTemplate jdbc, TelegramClient telegram, Clock clock, RaceRadioProperties props, SystemPrompt prompt,
                          ModelTransport transport, SegmentLibrary library, StravaHarvest harvest, boolean structured,
                          String configuredWrites, String strapSince, java.net.URI intervalsApi,
-                         ModelTransport free, String freeModel) {
+                         ModelTransport free, String freeModel, io.github.pharaphara.raceradio.bot.strava.ZoneHarvest zone) {
     }
 
     private final Athlete athlete;
@@ -145,7 +145,8 @@ public final class AthleteServices {
 
         this.segments = new LocalSegments(db, s.library(), streams, clock);
         Segments segmentCommands = new Segments(db, athlete.administrator() ? s.harvest() : null, s.telegram(), chatId)
-                .withLocal(segments, s.library(), streams, clock);
+                .withLocal(segments, s.library(), streams, clock)
+                .withAdministration(athlete.administrator(), athlete.administrator() ? s.zone() : null);
         this.calibration = new Calibration(db, s.library(), streams);
 
         this.review = new SessionReview(intervals, writer, model, decisions, props.model().reviewEffort(), clock, streams::get)

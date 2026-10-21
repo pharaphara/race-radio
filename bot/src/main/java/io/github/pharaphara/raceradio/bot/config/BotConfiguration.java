@@ -154,6 +154,14 @@ public class BotConfiguration {
         return new io.github.pharaphara.raceradio.bot.strava.StravaHarvest(strava, administratorDb, clock);
     }
 
+    /** Whole areas of Strava segments for the shared library, through the administrator's application. */
+    @Bean
+    io.github.pharaphara.raceradio.bot.strava.ZoneHarvest zoneHarvest(io.github.pharaphara.raceradio.bot.strava.StravaClient strava,
+                                                                     io.github.pharaphara.raceradio.bot.store.AthleteDb administratorDb,
+                                                                     Clock clock) {
+        return new io.github.pharaphara.raceradio.bot.strava.ZoneHarvest(strava, administratorDb, clock);
+    }
+
     @Bean
     io.github.pharaphara.raceradio.bot.athlete.Athletes athletes(org.springframework.jdbc.core.JdbcTemplate jdbc) {
         return new io.github.pharaphara.raceradio.bot.athlete.Athletes(jdbc);
@@ -166,6 +174,7 @@ public class BotConfiguration {
             TelegramClient telegram, Clock clock, ModelTransport transport,
             io.github.pharaphara.raceradio.bot.strava.SegmentLibrary library,
             io.github.pharaphara.raceradio.bot.strava.StravaHarvest harvest,
+            io.github.pharaphara.raceradio.bot.strava.ZoneHarvest zone,
             java.util.Optional<io.github.pharaphara.raceradio.bot.athlete.SecretBox> box,
             @org.springframework.beans.factory.annotation.Value("${race-radio.writes:}") String writes,
             @org.springframework.beans.factory.annotation.Value("${race-radio.hr-strap-since:}") String strapSince,
@@ -180,7 +189,7 @@ public class BotConfiguration {
         LOG.info("free model for invited athletes: {}", free == null ? "none configured" : freeModel);
         var shared = new io.github.pharaphara.raceradio.bot.athlete.AthleteServices.Shared(jdbc, telegram, clock, props,
                 SystemPrompt.fromClasspath(PROMPT), new io.github.pharaphara.raceradio.bot.llm.LimitedTransport(transport, permits),
-                library, harvest, structured(), writes, strapSince, null, free, freeModel);
+                library, harvest, structured(), writes, strapSince, null, free, freeModel, zone);
         return new io.github.pharaphara.raceradio.bot.athlete.AthleteRegistry(athletes, shared, a -> {
             if (a.administrator()) {
                 return props.intervals().apiKey();
