@@ -239,7 +239,8 @@ public class BotConfiguration {
                 telegram.send(adminChat, a.name() + " vient d'entrer sur le coach (" + (a.modelRoute().equals("free") ? "modèle gratuit" : "abonnement")
                         + "). /athletes pour la liste.");
             }
-            Thread.ofVirtual().name("welcome-" + id.value()).start(() -> registry.jobs(registry.services(a)).backfill());
+            Thread.ofVirtual().name("welcome-" + id.value()).start(() -> io.github.pharaphara.raceradio.bot.athlete.AthleteLog.run(id,
+                    () -> registry.jobs(registry.services(a)).backfill()));
         });
     }
 

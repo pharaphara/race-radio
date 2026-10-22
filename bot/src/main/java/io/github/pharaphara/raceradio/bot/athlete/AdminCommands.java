@@ -216,9 +216,9 @@ public final class AdminCommands {
             try (Stream<Path> files = Files.walk(dir)) {
                 files.sorted(Comparator.reverseOrder()).forEach(f -> f.toFile().delete());
             } catch (IOException e) {
-                LOG.warn("{}: files not all removed: {}", a.label(), e.getMessage());
+                LOG.warn("athlete #{}: files not all removed: {}", a.id().value(), e.getMessage());
             }
         }
-        LOG.info("{} removed", a.label());
+        LOG.info("athlete #{} removed", a.id().value());
     }
 }
