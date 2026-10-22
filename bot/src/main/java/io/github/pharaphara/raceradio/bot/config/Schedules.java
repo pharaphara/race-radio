@@ -81,11 +81,13 @@ public class Schedules implements SchedulingConfigurer {
     /** The job for every active athlete, one after the other. */
     void each(String name, Consumer<AthleteJobs> job) {
         for (AthleteServices s : registry.active()) {
-            try {
-                job.accept(registry.jobs(s));
-            } catch (RuntimeException e) {
-                LOG.warn("{}: {} failed: {}", s.athlete().label(), name, e.getMessage());
-            }
+            io.github.pharaphara.raceradio.bot.athlete.AthleteLog.run(s.athlete().id(), () -> {
+                try {
+                    job.accept(registry.jobs(s));
+                } catch (RuntimeException e) {
+                    LOG.warn("{} failed: {}", name, e.getMessage());
+                }
+            });
         }
     }
 

@@ -1,4 +1,11 @@
 # Defaults. Secrets come from the environment: see .env.example.
+logging:
+  pattern:
+    # Each line says whose work it is: #2 for an athlete, "new" for a check-in, blank for the service.
+    console: "%d{yyyy-MM-dd HH:mm:ss} %-5level [%-3X{athlete}] %logger{0} : %msg%n%wEx"
+  level:
+    root: WARN
+    io.github.pharaphara: INFO
 spring:
   application:
     name: race-radio

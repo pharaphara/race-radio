@@ -83,6 +83,7 @@ public class RunOnce implements ApplicationRunner {
         }
         if (!once.equals("reset")) {
             forAdministrator();
+            org.slf4j.MDC.put(io.github.pharaphara.raceradio.bot.athlete.AthleteLog.KEY, "#" + registry.administrator().athlete().id().value());
         }
         if (once.equals("reset")) {
             // The move itself was made when the database was prepared, before anything opened it.

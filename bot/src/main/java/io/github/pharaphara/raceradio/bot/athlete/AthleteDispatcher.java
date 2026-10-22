@@ -59,18 +59,22 @@ public final class AthleteDispatcher {
     void handleNow(TelegramClient.Update u) {
         Optional<AthleteServices> athlete = registry.forChat(u.chatId());
         if (athlete.isPresent()) {
-            if (athlete.get().athlete().administrator() && admin.handles(u)) {
-                admin.handle(u, u.chatId());
+            AthleteLog.run(athlete.get().athlete().id(), () -> {
+                if (athlete.get().athlete().administrator() && admin.handles(u)) {
+                    admin.handle(u, u.chatId());
+                    return;
+                }
+                athlete.get().router().handle(u);
+            });
+            return;
+        }
+        AthleteLog.run(null, () -> {
+            if (checkIn.concerns(u)) {
+                checkIn.handle(u);
                 return;
             }
-            athlete.get().router().handle(u);
-            return;
-        }
-        if (checkIn.concerns(u)) {
-            checkIn.handle(u);
-            return;
-        }
-        stranger(u);
+            stranger(u);
+        });
     }
 
     private void stranger(TelegramClient.Update u) {
